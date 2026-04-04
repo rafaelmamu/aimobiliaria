@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────
+  # Application
+  # ─────────────────────────────────────────
+  app:
+    build: .
+    container_name: aimobiliaria-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app  # Hot reload in development
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ─────────────────────────────────────────
+  # PostgreSQL
+  # ─────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: aimobiliaria-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aimobiliaria}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aimobiliaria_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-aimobiliaria}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aimobiliaria}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  # Redis
+  # ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: aimobiliaria-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
