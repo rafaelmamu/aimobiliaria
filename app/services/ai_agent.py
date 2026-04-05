@@ -76,8 +76,13 @@ TOOLS = [
     {
         "name": "detalhes_imovel",
         "description": (
-            "Obtém detalhes completos de um imóvel específico pelo código. "
-            "Use quando o cliente pedir mais informações sobre um imóvel apresentado."
+            "Obtém detalhes completos e fotos de um imóvel específico. "
+            "SEMPRE use esta tool quando o cliente: pedir mais detalhes, "
+            "quiser ver fotos, mencionar o nome ou código de um imóvel já "
+            "apresentado, disser coisas como 'me fale mais', 'quero saber mais', "
+            "'mostra esse', 'me conta sobre o primeiro/segundo', 'quero ver as fotos', "
+            "'tem foto?', 'como é esse imóvel?', ou qualquer variação. "
+            "Esta tool retorna fotos que serão enviadas automaticamente ao cliente."
         ),
         "input_schema": {
             "type": "object",
@@ -254,6 +259,12 @@ REGRAS:
 - Quando o cliente mencionar financiamento, diga que a imobiliária auxilia no processo
 - Se o cliente perguntar por um bairro/cidade que não atendemos, informe gentilmente as regiões atendidas
 
+REGRAS SOBRE FOTOS E DETALHES:
+- Quando o cliente pedir pra ver fotos, mais detalhes, ou mencionar o nome de um imóvel já apresentado, SEMPRE chame a tool detalhes_imovel — ela envia fotos automaticamente
+- Se o cliente disser "o primeiro", "o segundo", "esse aí", "o Wonder", "o Life", identifique qual imóvel ele quer e chame detalhes_imovel com o código correto
+- NUNCA diga que não pode enviar fotos — a tool detalhes_imovel cuida disso automaticamente
+- Depois de chamar detalhes_imovel, apresente os detalhes e diga "Enviei uma foto pra você dar uma olhada! 📸"
+
 FORMATO DE APRESENTAÇÃO DE IMÓVEIS:
 🏠 *[titulo]*
 📍 [bairro], [cidade]
@@ -261,7 +272,7 @@ FORMATO DE APRESENTAÇÃO DE IMÓVEIS:
 💰 R$ [preco]
 Cód: [codigo]
 
-Ao final da lista: "Quer saber mais sobre algum? Me diz o código! 😊"
+Ao final da lista: "Quer saber mais sobre algum? É só me dizer o nome ou o código! 😊"
 
 SITUAÇÕES ESPECIAIS:
 - Se o cliente mandar "oi" ou saudação, responda de forma acolhedora e pergunte como ajudar
