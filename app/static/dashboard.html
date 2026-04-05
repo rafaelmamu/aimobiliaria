@@ -533,6 +533,10 @@
             <div class="nav-item" onclick="showPage('conversations')">
                 <span>💬</span> Conversas
             </div>
+            <div class="nav-item" onclick="showPage('appointments')">
+                <span>📅</span> Agendamentos
+                <span class="badge" id="appointments-badge" style="background:#f59e0b">0</span>
+            </div>
 
             <div class="nav-section">Sistema</div>
             <div class="nav-item" onclick="checkHealth()">
@@ -702,6 +706,43 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Appointments Page -->
+            <div id="page-appointments" style="display:none">
+                <div class="page-header">
+                    <h2>Agendamentos</h2>
+                    <p>Visitas agendadas pelos leads</p>
+                </div>
+
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>Visitas</h3>
+                        <div class="filter-bar">
+                            <button class="filter-btn active" onclick="filterAppointments(null, this)">Todas</button>
+                            <button class="filter-btn" onclick="filterAppointments('pending', this)">Pendentes</button>
+                            <button class="filter-btn" onclick="filterAppointments('confirmed', this)">Confirmadas</button>
+                            <button class="filter-btn" onclick="filterAppointments('completed', this)">Realizadas</button>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Lead</th>
+                                    <th>Imóvel</th>
+                                    <th>Data</th>
+                                    <th>Status</th>
+                                    <th>Observações</th>
+                                    <th>Criado em</th>
+                                </tr>
+                            </thead>
+                            <tbody id="appointments-table">
+                                <tr><td colspan="6" class="loading"><div class="spinner"></div>Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -732,6 +773,7 @@
             if (page === 'dashboard') loadDashboard();
             if (page === 'leads') loadLeads();
             if (page === 'conversations') loadConversationsList();
+            if (page === 'appointments') loadAppointments();
         }
 
         // ─── Dashboard ───
@@ -750,6 +792,7 @@
                 document.getElementById('stat-messages').textContent = stats.total_messages || 0;
                 document.getElementById('stat-appointments').textContent = stats.total_appointments || 0;
                 document.getElementById('leads-badge').textContent = stats.total_leads || 0;
+                document.getElementById('appointments-badge').textContent = stats.total_appointments || 0;
 
                 renderLeadsTable('recent-leads-table', leads.slice(0, 10));
             } catch (e) {
@@ -995,6 +1038,74 @@
                 loadConversation(currentLeadId);
             }
         }, 15000); // Refresh every 15s
+
+        // ─── Appointments ───
+        async function loadAppointments(status = null) {
+            try {
+                let url = `${API_BASE}/admin/tenants/${TENANT_SLUG}/appointments`;
+                if (status) url += `?status=${status}`;
+                const res = await fetch(url);
+                const appointments = await res.json();
+                renderAppointmentsTable(appointments);
+            } catch (e) {
+                console.error('Appointments error:', e);
+            }
+        }
+
+        function filterAppointments(status, btn) {
+            document.querySelectorAll('#page-appointments .filter-btn').forEach(el => el.classList.remove('active'));
+            btn.classList.add('active');
+            loadAppointments(status);
+        }
+
+        function renderAppointmentsTable(appointments) {
+            const tbody = document.getElementById('appointments-table');
+            if (!appointments.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="icon">📅</div><p>Nenhum agendamento encontrado</p></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = appointments.map(apt => {
+                const statusClass = {
+                    'pending': 'status-new',
+                    'confirmed': 'status-active',
+                    'completed': 'status-converted',
+                    'cancelled': 'status-lost',
+                }[apt.status] || 'status-new';
+
+                const statusLabel = {
+                    'pending': 'Pendente',
+                    'confirmed': 'Confirmada',
+                    'completed': 'Realizada',
+                    'cancelled': 'Cancelada',
+                }[apt.status] || apt.status;
+
+                const scheduledDate = apt.scheduled_date
+                    ? new Date(apt.scheduled_date).toLocaleDateString('pt-BR')
+                    : 'A combinar';
+
+                const createdAt = apt.created_at
+                    ? timeAgo(apt.created_at)
+                    : '-';
+
+                return `
+                    <tr onclick="openConversation('${apt.id}', '${apt.lead_name}', '${apt.lead_phone}')">
+                        <td>
+                            <span class="lead-name">${apt.lead_name}</span>
+                            <span class="lead-phone">${formatPhone(apt.lead_phone)}</span>
+                        </td>
+                        <td>
+                            <span class="lead-name">${apt.property_title || apt.property_id}</span>
+                            <span class="lead-phone">Cód: ${apt.property_id}</span>
+                        </td>
+                        <td>${scheduledDate}</td>
+                        <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
+                        <td style="font-size:12px;color:#a1a1aa;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${apt.notes || '-'}</td>
+                        <td class="time-ago">${createdAt}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
 
         // ─── Init ───
         loadDashboard();

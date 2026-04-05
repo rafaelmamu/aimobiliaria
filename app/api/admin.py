@@ -212,3 +212,50 @@ async def get_tenant_stats(
         "total_messages": total_messages,
         "total_appointments": total_appointments,
     }
+
+
+# ─────────────────────────────────────────────
+# Appointments Endpoint
+# ─────────────────────────────────────────────
+
+
+@router.get("/tenants/{tenant_slug}/appointments")
+async def list_appointments(
+    tenant_slug: str,
+    status: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all appointments for a tenant."""
+    stmt = select(Tenant).where(Tenant.slug == tenant_slug)
+    result = await db.execute(stmt)
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    query = (
+        select(Appointment, Lead)
+        .join(Lead, Appointment.lead_id == Lead.id)
+        .where(Appointment.tenant_id == tenant.id)
+    )
+    if status:
+        query = query.where(Appointment.status == status)
+    query = query.order_by(Appointment.created_at.desc())
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    return [
+        {
+            "id": str(apt.id),
+            "lead_name": lead.name or "Não informado",
+            "lead_phone": lead.whatsapp_number,
+            "property_id": apt.property_id,
+            "property_title": apt.property_title,
+            "scheduled_date": apt.scheduled_date.isoformat() if apt.scheduled_date else None,
+            "status": apt.status,
+            "notes": apt.notes,
+            "broker_notified": apt.broker_notified,
+            "created_at": apt.created_at.isoformat() if apt.created_at else None,
+        }
+        for apt, lead in rows
+    ]
