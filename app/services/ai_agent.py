@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 import anthropic
@@ -8,6 +9,9 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Timezone for São Paulo
+BR_TZ = timezone(timedelta(hours=-3))
 
 # ─────────────────────────────────────────────
 # Tool Definitions for Claude
@@ -121,7 +125,8 @@ TOOLS = [
         "description": (
             "Transfere o atendimento para um corretor humano. "
             "Use quando o cliente pedir explicitamente para falar com uma pessoa, "
-            "ou quando a situação exigir atendimento humano."
+            "ou quando a situação exigir atendimento humano (negociação de preço, "
+            "dúvidas jurídicas, financiamento detalhado)."
         ),
         "input_schema": {
             "type": "object",
@@ -139,51 +144,140 @@ TOOLS = [
             "required": ["motivo"],
         },
     },
+    {
+        "name": "salvar_preferencias",
+        "description": (
+            "Salva ou atualiza as preferências do cliente conforme você descobre "
+            "durante a conversa. Chame esta tool SEMPRE que o cliente informar: "
+            "se quer comprar ou alugar, tipo de imóvel, cidade, bairro, número de "
+            "quartos, faixa de preço, se tem financiamento, prazo pra mudar, ou "
+            "qualquer outra preferência relevante. Pode chamar múltiplas vezes "
+            "conforme descobre novas informações."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "interesse": {
+                    "type": "string",
+                    "enum": ["compra", "aluguel"],
+                    "description": "Se o cliente quer comprar ou alugar",
+                },
+                "tipo_imovel": {
+                    "type": "string",
+                    "description": "Tipo de imóvel desejado (apartamento, casa, etc)",
+                },
+                "cidade": {
+                    "type": "string",
+                    "description": "Cidade de interesse",
+                },
+                "bairros": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Bairros de interesse",
+                },
+                "quartos_min": {
+                    "type": "integer",
+                    "description": "Número mínimo de quartos",
+                },
+                "preco_min": {
+                    "type": "number",
+                    "description": "Preço mínimo em reais",
+                },
+                "preco_max": {
+                    "type": "number",
+                    "description": "Preço máximo em reais",
+                },
+                "area_min": {
+                    "type": "number",
+                    "description": "Área mínima desejada em m²",
+                },
+                "tem_financiamento": {
+                    "type": "boolean",
+                    "description": "Se o cliente pretende financiar",
+                },
+                "prazo_mudanca": {
+                    "type": "string",
+                    "description": "Prazo pra mudança (ex: imediato, 3 meses, 6 meses)",
+                },
+                "observacoes": {
+                    "type": "string",
+                    "description": "Outras preferências mencionadas pelo cliente",
+                },
+            },
+        },
+    },
 ]
 
 # ─────────────────────────────────────────────
 # Default System Prompt
 # ─────────────────────────────────────────────
 
-DEFAULT_SYSTEM_PROMPT = """Você é o assistente virtual da {tenant_name}, especialista em ajudar clientes a encontrar o imóvel ideal.
+DEFAULT_SYSTEM_PROMPT = """Você é o assistente virtual da {tenant_name}, especialista em ajudar clientes a encontrar o imóvel ideal na região do Vale do Paraíba.
+
+CONTEXTO:
+- Data e hora atual: {current_datetime}
+- Você está disponível 24 horas por dia, 7 dias por semana
+- Horário comercial da equipe de corretores: segunda a sexta 8h-18h, sábado 9h-13h
+- Fora do horário comercial, você atende normalmente, mas se o cliente pedir um corretor humano, informe que um corretor retornará no próximo horário comercial
 
 PERSONALIDADE:
-- Cordial, profissional e acolhedor
-- Linguagem natural e brasileira (nunca robótica)
-- Objetivo: entender a necessidade e apresentar opções relevantes
+- Tom acolhedor e consultivo, como um amigo que entende de imóveis
+- Linguagem natural e brasileira — escreva como uma pessoa real, não um robô
+- Use humor leve quando apropriado, mas sempre profissional
+- Demonstre entusiasmo genuíno quando encontrar boas opções pro cliente
 - Nunca invente informações — só apresente dados reais retornados pelas tools
 
 FLUXO DE ATENDIMENTO:
-1. Cumprimente de forma breve e pergunte como pode ajudar
-2. Descubra: compra ou aluguel?
-3. Descubra gradualmente (sem bombardear perguntas):
-   - Tipo de imóvel (apartamento, casa, terreno, etc)
+1. Cumprimente brevemente e pergunte como pode ajudar
+2. Descubra: compra ou aluguel? (e salve com salvar_preferencias)
+3. Descubra gradualmente, sem bombardear:
+   - Tipo de imóvel (apartamento, casa, terreno, chácara)
    - Região/bairro de interesse
    - Número de quartos
    - Faixa de preço
-   - Outras preferências relevantes
-4. Quando tiver informações suficientes, use a tool buscar_imoveis
-5. Apresente as opções de forma resumida e atraente
-6. Se houver interesse, ofereça detalhes ou agende visita
-7. Se não encontrar opções, sugira ajustar critérios
+   - Outras preferências
+4. A cada informação nova, chame salvar_preferencias pra registrar
+5. Quando tiver dados suficientes, busque imóveis com buscar_imoveis
+6. Apresente as opções de forma atraente e resumida
+7. Se houver interesse, ofereça detalhes ou agende visita
+8. Se não encontrar, sugira ajustar critérios ou bairros próximos
 
-REGRAS IMPORTANTES:
-- Máximo 2-3 perguntas por mensagem
-- Respostas CURTAS — isso é WhatsApp, não email
-- Use emojis com moderação (1-2 por mensagem no máximo)
-- Ao apresentar imóveis: nome, bairro, quartos, área, preço
-- Sempre pergunte se quer ver mais ou outras opções
-- Se pedir corretor humano, use a tool transferir_corretor imediatamente
-- Nunca pressione o cliente — seja consultivo
-- Se o cliente mandar mensagem fora do contexto imobiliário, redirecione gentilmente
+REGRAS:
+- Máximo 2 perguntas por mensagem — isso é WhatsApp, não formulário
+- Respostas CURTAS e diretas — ninguém lê textão no WhatsApp
+- Use emojis com moderação (1-2 por mensagem, máximo)
+- Ao apresentar imóveis, use o formato padrão abaixo
+- Sempre pergunte se quer ver mais detalhes ou outras opções
+- Se pedir corretor humano, use transferir_corretor imediatamente
+- Nunca pressione — seja consultivo, não vendedor
+- Se o cliente perguntar algo fora do contexto imobiliário, responda brevemente e redirecione com naturalidade
+- Quando o cliente mencionar financiamento, diga que a imobiliária auxilia no processo
+- Se o cliente perguntar por um bairro/cidade que não atendemos, informe gentilmente as regiões atendidas
 
 FORMATO DE APRESENTAÇÃO DE IMÓVEIS:
-🏠 *[titulo do imóvel]*
+🏠 *[titulo]*
 📍 [bairro], [cidade]
 🛏 [quartos] quartos | 📐 [area]m²
 💰 R$ [preco]
 Cód: [codigo]
+
+Ao final da lista: "Quer saber mais sobre algum? Me diz o código! 😊"
+
+SITUAÇÕES ESPECIAIS:
+- Se o cliente mandar "oi" ou saudação, responda de forma acolhedora e pergunte como ajudar
+- Se o cliente mandar áudio, peça gentilmente pra enviar por texto
+- Se perguntar sobre documentação/ITBI/escritura, dê uma orientação geral e sugira falar com um corretor
+- Se perguntar sobre financiamento em detalhes (taxa, parcela), sugira falar com um corretor que pode simular
 """
+
+
+def _get_current_datetime() -> str:
+    """Get current datetime formatted for Brazil."""
+    now = datetime.now(BR_TZ)
+    dias = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
+            "sexta-feira", "sábado", "domingo"]
+    dia_semana = dias[now.weekday()]
+    return now.strftime(f"{dia_semana}, %d/%m/%Y às %H:%M")
 
 
 class AIAgent:
@@ -201,21 +295,17 @@ class AIAgent:
     ) -> dict:
         """Process a message through Claude with tool use.
 
-        Args:
-            conversation_history: List of {"role": "user"|"assistant", "content": "..."}
-            tenant_name: Name of the real estate agency
-            system_prompt: Custom system prompt (or uses default)
-            tool_handlers: Dict mapping tool names to handler functions
-
         Returns:
             dict with:
                 - response: str (text to send to user)
                 - tool_calls: list of tools that were called
                 - tool_results: list of results from tool calls
+                - images_to_send: list of image URLs to send after text
         """
-        # Build system prompt
+        # Build system prompt with current datetime
         prompt = (system_prompt or DEFAULT_SYSTEM_PROMPT).format(
-            tenant_name=tenant_name
+            tenant_name=tenant_name,
+            current_datetime=_get_current_datetime(),
         )
 
         # Call Claude
@@ -233,23 +323,22 @@ class AIAgent:
                 "response": "Desculpe, estou com uma dificuldade técnica no momento. Um corretor entrará em contato em breve!",
                 "tool_calls": [],
                 "tool_results": [],
+                "images_to_send": [],
             }
 
         # Process response - handle tool use loop
         tool_calls = []
         tool_results = []
+        images_to_send = []
         final_text = ""
 
-        # Claude might need multiple rounds of tool use
         current_response = response
         messages = list(conversation_history)
 
         while current_response.stop_reason == "tool_use":
-            # Collect all content blocks
             assistant_content = current_response.content
             messages.append({"role": "assistant", "content": assistant_content})
 
-            # Process each tool use block
             tool_result_contents = []
             for block in assistant_content:
                 if block.type == "tool_use":
@@ -269,6 +358,16 @@ class AIAgent:
                             tool_results.append(
                                 {"name": tool_name, "result": result}
                             )
+
+                            # Collect images from property details
+                            if tool_name == "detalhes_imovel" and isinstance(result, dict):
+                                foto = result.get("foto_principal") or ""
+                                if foto and foto.startswith("http") and "placeholder" not in foto:
+                                    images_to_send.append({
+                                        "url": foto,
+                                        "caption": f"{result.get('titulo', 'Imóvel')} - Cód: {result.get('codigo', '')}",
+                                    })
+
                         except Exception as e:
                             logger.error(f"Tool handler error for {tool_name}: {e}")
                             result = {"error": f"Erro ao executar {tool_name}: {str(e)}"}
@@ -283,7 +382,6 @@ class AIAgent:
                         }
                     )
 
-            # Send tool results back to Claude
             messages.append({"role": "user", "content": tool_result_contents})
 
             try:
@@ -307,4 +405,5 @@ class AIAgent:
             "response": final_text,
             "tool_calls": tool_calls,
             "tool_results": tool_results,
+            "images_to_send": images_to_send,
         }

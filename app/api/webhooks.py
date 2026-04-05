@@ -15,6 +15,7 @@ from app.services.property_api import MockPropertyAPIClient, PropertyAPIClient
 from app.services.session_manager import SessionManager
 from app.services.whatsapp import WhatsAppService
 from app.tools.get_property_details import handle_get_property_details
+from app.tools.save_preferences import handle_save_preferences
 from app.tools.schedule_visit import handle_schedule_visit
 from app.tools.search_properties import handle_search_properties
 from app.tools.transfer_broker import handle_transfer_broker
@@ -38,15 +39,10 @@ async def verify_webhook(
     hub_challenge: str = Query(None, alias="hub.challenge"),
     hub_verify_token: str = Query(None, alias="hub.verify_token"),
 ):
-    """WhatsApp webhook verification (called by Meta during setup).
-
-    Meta sends a GET request with hub.mode, hub.challenge, and hub.verify_token.
-    We validate the token and return the challenge to confirm.
-    """
+    """WhatsApp webhook verification (called by Meta during setup)."""
     if hub_mode != "subscribe":
         return Response(status_code=403)
 
-    # Find tenant by slug
     stmt = select(Tenant).where(Tenant.slug == tenant_slug, Tenant.active == True)
     result = await db.execute(stmt)
     tenant = result.scalar_one_or_none()
@@ -75,14 +71,9 @@ async def handle_webhook(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """Receive incoming WhatsApp messages and process them.
-
-    This endpoint returns 200 immediately and processes the message
-    in the background to avoid webhook timeouts.
-    """
+    """Receive incoming WhatsApp messages and process them."""
     body = await request.json()
 
-    # Find tenant
     stmt = select(Tenant).where(Tenant.slug == tenant_slug, Tenant.active == True)
     result = await db.execute(stmt)
     tenant = result.scalar_one_or_none()
@@ -91,18 +82,22 @@ async def handle_webhook(
         logger.warning(f"Message for unknown tenant: {tenant_slug}")
         return {"status": "ignored"}
 
-    # Parse the WhatsApp message
     message_data = WhatsAppService.parse_webhook_message(body)
     if not message_data:
-        # Not a message event (could be status update, etc.)
         return {"status": "ok"}
 
-    # Skip non-text messages for now (can be expanded later)
+    # Skip non-text messages but inform the user
     if message_data["message_type"] not in ("text", "interactive"):
+        if message_data["message_type"] == "audio":
+            # Let the user know we can't process audio
+            background_tasks.add_task(
+                _send_audio_notice,
+                tenant=tenant,
+                to=message_data["from_number"],
+            )
         logger.info(f"Skipping {message_data['message_type']} message")
         return {"status": "ok"}
 
-    # Process in background to return 200 fast
     background_tasks.add_task(
         process_incoming_message,
         tenant=tenant,
@@ -110,6 +105,21 @@ async def handle_webhook(
     )
 
     return {"status": "ok"}
+
+
+async def _send_audio_notice(tenant: Tenant, to: str):
+    """Send a notice that we can't process audio messages."""
+    try:
+        whatsapp = WhatsAppService(
+            phone_number_id=tenant.whatsapp_phone_id,
+            access_token=tenant.whatsapp_token,
+        )
+        await whatsapp.send_text_message(
+            to=to,
+            text="Desculpe, ainda não consigo ouvir áudios. 😅 Pode me enviar por texto?",
+        )
+    except Exception as e:
+        logger.error(f"Failed to send audio notice: {e}")
 
 
 # ─────────────────────────────────────────────
@@ -125,8 +135,8 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
     2. Get/create session in Redis
     3. Save inbound message
     4. Send to Claude with tools
-    5. Process tool calls
-    6. Send response via WhatsApp
+    5. Process tool calls (including saving preferences)
+    6. Send response via WhatsApp (text + images)
     7. Save outbound message
     """
     from app.database import async_session
@@ -161,7 +171,6 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
             # 2. Get or create session
             session = await session_mgr.get_session(tenant_id, from_number)
             if not session:
-                # Try to recover context from PostgreSQL
                 recent_messages = await lead_mgr.get_recent_messages(lead_id, limit=10)
                 session = await session_mgr.create_session(
                     tenant_id, from_number, lead_id
@@ -192,7 +201,6 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
                     config=tenant.api_config or {},
                 )
             else:
-                # Use mock data during development
                 property_client = MockPropertyAPIClient(
                     base_url="http://mock", api_key=None
                 )
@@ -214,6 +222,11 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
                 "transferir_corretor": partial(
                     handle_transfer_broker, tenant_config=tenant.config or {}
                 ),
+                "salvar_preferencias": partial(
+                    handle_save_preferences,
+                    lead_manager=lead_mgr,
+                    lead_id=lead_id,
+                ),
             }
 
             # 7. Process with Claude AI
@@ -226,27 +239,44 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
 
             response_text = ai_result["response"]
 
-            # 8. Send response via WhatsApp
+            # 8. Send response via WhatsApp (text first)
             await whatsapp.send_text_message(to=from_number, text=response_text)
 
-            # 9. Save outbound message
+            # 9. Send property images if any
+            for image in ai_result.get("images_to_send", []):
+                try:
+                    await whatsapp.send_image_message(
+                        to=from_number,
+                        image_url=image["url"],
+                        caption=image.get("caption", ""),
+                    )
+                    logger.info(f"Image sent to {from_number}: {image['url']}")
+                except Exception as e:
+                    logger.error(f"Failed to send image: {e}")
+
+            # 10. Save outbound message
             await lead_mgr.save_message(
                 lead_id=lead_id,
                 tenant_id=tenant_id,
                 direction="outbound",
                 content=response_text,
                 metadata={
-                    "tool_calls": ai_result.get("tool_calls", []),
+                    "tool_calls": [
+                        {"name": t["name"], "input": t["input"]}
+                        for t in ai_result.get("tool_calls", [])
+                    ],
+                    "images_sent": len(ai_result.get("images_to_send", [])),
                 },
             )
 
-            # 10. Update session with assistant response
+            # 11. Update session with assistant response
             await session_mgr.add_message_to_history(
                 tenant_id, from_number, "assistant", response_text
             )
 
             logger.info(
-                f"Processed message from {from_number} for tenant {tenant.slug}"
+                f"Processed message from {from_number} for tenant {tenant.slug} "
+                f"(tools: {[t['name'] for t in ai_result.get('tool_calls', [])]})"
             )
 
         except Exception as e:
@@ -254,7 +284,6 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
                 f"Error processing message from {message_data.get('from_number', '?')}: {e}",
                 exc_info=True,
             )
-            # Try to send error message to user
             try:
                 whatsapp = WhatsAppService(
                     phone_number_id=tenant.whatsapp_phone_id,

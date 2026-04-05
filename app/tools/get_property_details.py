@@ -39,6 +39,7 @@ async def handle_get_property_details(
         "caracteristicas": details.get("caracteristicas", []),
         "lazer": details.get("lazer", []),
         "aceita_financiamento": details.get("aceita_financiamento"),
-        "fotos": details.get("fotos", [])[:5],  # Max 5 photos
+        "foto_principal": details.get("foto_principal", ""),
+        "fotos": details.get("fotos", [])[:5],
         "url": details.get("url", ""),
     }
