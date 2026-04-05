@@ -108,6 +108,10 @@ TOOLS = [
                     "type": "string",
                     "description": "Código do imóvel a ser visitado",
                 },
+                "titulo_imovel": {
+                    "type": "string",
+                    "description": "Nome/título do imóvel (ex: Wonder - 3 Dorms)",
+                },
                 "data_preferencia": {
                     "type": "string",
                     "description": "Data preferida (formato: YYYY-MM-DD)",

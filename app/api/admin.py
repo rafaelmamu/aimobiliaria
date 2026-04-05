@@ -247,8 +247,10 @@ async def list_appointments(
     return [
         {
             "id": str(apt.id),
+            "lead_id": str(apt.lead_id),
             "lead_name": lead.name or "Não informado",
             "lead_phone": lead.whatsapp_number,
+            "lead_profile": lead.profile_data or {},
             "property_id": apt.property_id,
             "property_title": apt.property_title,
             "scheduled_date": apt.scheduled_date.isoformat() if apt.scheduled_date else None,
@@ -256,6 +258,43 @@ async def list_appointments(
             "notes": apt.notes,
             "broker_notified": apt.broker_notified,
             "created_at": apt.created_at.isoformat() if apt.created_at else None,
+            "updated_at": apt.updated_at.isoformat() if apt.updated_at else None,
         }
         for apt, lead in rows
     ]
+
+
+class AppointmentUpdate(BaseModel):
+    status: str | None = None
+    notes: str | None = None
+    scheduled_date: str | None = None
+
+
+@router.patch("/appointments/{appointment_id}")
+async def update_appointment(
+    appointment_id: str,
+    data: AppointmentUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update appointment status or notes."""
+    stmt = select(Appointment).where(Appointment.id == uuid.UUID(appointment_id))
+    result = await db.execute(stmt)
+    apt = result.scalar_one_or_none()
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    if data.status:
+        apt.status = data.status
+    if data.notes is not None:
+        apt.notes = data.notes
+    if data.scheduled_date:
+        try:
+            from datetime import date as date_type
+            apt.scheduled_date = date_type.fromisoformat(data.scheduled_date)
+        except ValueError:
+            pass
+
+    apt.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return {"success": True, "status": apt.status}

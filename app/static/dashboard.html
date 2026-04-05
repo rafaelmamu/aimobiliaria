@@ -714,32 +714,77 @@
                     <p>Visitas agendadas pelos leads</p>
                 </div>
 
-                <div class="section-card">
-                    <div class="section-header">
-                        <h3>Visitas</h3>
-                        <div class="filter-bar">
-                            <button class="filter-btn active" onclick="filterAppointments(null, this)">Todas</button>
-                            <button class="filter-btn" onclick="filterAppointments('pending', this)">Pendentes</button>
-                            <button class="filter-btn" onclick="filterAppointments('confirmed', this)">Confirmadas</button>
-                            <button class="filter-btn" onclick="filterAppointments('completed', this)">Realizadas</button>
+                <!-- Appointments list -->
+                <div id="apt-list">
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h3>Visitas</h3>
+                            <div class="filter-bar">
+                                <button class="filter-btn active" onclick="filterAppointments(null, this)">Todas</button>
+                                <button class="filter-btn" onclick="filterAppointments('pending', this)">Pendentes</button>
+                                <button class="filter-btn" onclick="filterAppointments('confirmed', this)">Confirmadas</button>
+                                <button class="filter-btn" onclick="filterAppointments('completed', this)">Realizadas</button>
+                            </div>
+                        </div>
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Lead</th>
+                                        <th>Imóvel</th>
+                                        <th>Data</th>
+                                        <th>Status</th>
+                                        <th>Criado em</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="appointments-table">
+                                    <tr><td colspan="5" class="loading"><div class="spinner"></div>Carregando...</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
-                    <div class="table-wrapper">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Lead</th>
-                                    <th>Imóvel</th>
-                                    <th>Data</th>
-                                    <th>Status</th>
-                                    <th>Observações</th>
-                                    <th>Criado em</th>
-                                </tr>
-                            </thead>
-                            <tbody id="appointments-table">
-                                <tr><td colspan="6" class="loading"><div class="spinner"></div>Carregando...</td></tr>
-                            </tbody>
-                        </table>
+                </div>
+
+                <!-- Appointment detail -->
+                <div id="apt-detail" style="display:none">
+                    <div class="section-card" style="margin-bottom:20px">
+                        <div class="conv-header">
+                            <button class="conv-back" onclick="backToAppointments()">←</button>
+                            <div class="conv-lead-info">
+                                <h4 id="apt-title">Detalhes da Visita</h4>
+                                <span id="apt-protocol" style="color:#f59e0b"></span>
+                            </div>
+                        </div>
+                        <div style="padding:20px">
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px">
+                                <!-- Lead info -->
+                                <div class="lead-profile">
+                                    <h4>Lead</h4>
+                                    <div id="apt-lead-info"></div>
+                                </div>
+                                <!-- Property info -->
+                                <div class="lead-profile">
+                                    <h4>Imóvel</h4>
+                                    <div id="apt-property-info"></div>
+                                </div>
+                                <!-- Status & Actions -->
+                                <div class="lead-profile">
+                                    <h4>Gerenciar</h4>
+                                    <div id="apt-status-info"></div>
+                                    <div id="apt-actions" style="margin-top:16px;display:flex;flex-direction:column;gap:8px"></div>
+                                </div>
+                            </div>
+                            <!-- Notes -->
+                            <div style="margin-top:20px">
+                                <label style="font-size:12px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Observações do Corretor</label>
+                                <textarea id="apt-notes" style="width:100%;height:80px;background:#0a0a0b;border:1px solid #3f3f46;border-radius:8px;color:#fafafa;padding:10px;font-family:'DM Sans',sans-serif;font-size:13px;resize:vertical" placeholder="Adicione notas sobre esta visita..."></textarea>
+                                <button onclick="saveAppointmentNotes()" style="margin-top:8px;padding:6px 16px;background:#10b981;color:#000;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Salvar notas</button>
+                            </div>
+                            <!-- Link to conversation -->
+                            <div style="margin-top:16px;padding-top:16px;border-top:1px solid #27272a">
+                                <button onclick="openConversationFromApt()" style="padding:8px 16px;background:transparent;border:1px solid #3f3f46;color:#a1a1aa;border-radius:6px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">💬 Ver conversa completa do lead</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1040,13 +1085,16 @@
         }, 15000); // Refresh every 15s
 
         // ─── Appointments ───
+        let allAppointments = [];
+        let currentAptId = null;
+
         async function loadAppointments(status = null) {
             try {
                 let url = `${API_BASE}/admin/tenants/${TENANT_SLUG}/appointments`;
                 if (status) url += `?status=${status}`;
                 const res = await fetch(url);
-                const appointments = await res.json();
-                renderAppointmentsTable(appointments);
+                allAppointments = await res.json();
+                renderAppointmentsTable(allAppointments);
             } catch (e) {
                 console.error('Appointments error:', e);
             }
@@ -1061,35 +1109,22 @@
         function renderAppointmentsTable(appointments) {
             const tbody = document.getElementById('appointments-table');
             if (!appointments.length) {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="icon">📅</div><p>Nenhum agendamento encontrado</p></td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="icon">📅</div><p>Nenhum agendamento encontrado</p></td></tr>';
                 return;
             }
 
             tbody.innerHTML = appointments.map(apt => {
-                const statusClass = {
-                    'pending': 'status-new',
-                    'confirmed': 'status-active',
-                    'completed': 'status-converted',
-                    'cancelled': 'status-lost',
-                }[apt.status] || 'status-new';
-
-                const statusLabel = {
-                    'pending': 'Pendente',
-                    'confirmed': 'Confirmada',
-                    'completed': 'Realizada',
-                    'cancelled': 'Cancelada',
-                }[apt.status] || apt.status;
-
-                const scheduledDate = apt.scheduled_date
-                    ? new Date(apt.scheduled_date).toLocaleDateString('pt-BR')
-                    : 'A combinar';
-
-                const createdAt = apt.created_at
-                    ? timeAgo(apt.created_at)
-                    : '-';
+                const statusMap = {
+                    'pending': { cls: 'status-new', label: 'Pendente' },
+                    'confirmed': { cls: 'status-active', label: 'Confirmada' },
+                    'completed': { cls: 'status-converted', label: 'Realizada' },
+                    'cancelled': { cls: 'status-lost', label: 'Cancelada' },
+                };
+                const st = statusMap[apt.status] || statusMap['pending'];
+                const scheduledDate = apt.scheduled_date ? new Date(apt.scheduled_date).toLocaleDateString('pt-BR') : 'A combinar';
 
                 return `
-                    <tr onclick="openConversation('${apt.id}', '${apt.lead_name}', '${apt.lead_phone}')">
+                    <tr onclick="openAppointment('${apt.id}')">
                         <td>
                             <span class="lead-name">${apt.lead_name}</span>
                             <span class="lead-phone">${formatPhone(apt.lead_phone)}</span>
@@ -1099,12 +1134,122 @@
                             <span class="lead-phone">Cód: ${apt.property_id}</span>
                         </td>
                         <td>${scheduledDate}</td>
-                        <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
-                        <td style="font-size:12px;color:#a1a1aa;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${apt.notes || '-'}</td>
-                        <td class="time-ago">${createdAt}</td>
+                        <td><span class="status-badge ${st.cls}">${st.label}</span></td>
+                        <td class="time-ago">${apt.created_at ? timeAgo(apt.created_at) : '-'}</td>
                     </tr>
                 `;
             }).join('');
+        }
+
+        function openAppointment(aptId) {
+            currentAptId = aptId;
+            const apt = allAppointments.find(a => a.id === aptId);
+            if (!apt) return;
+
+            document.getElementById('apt-list').style.display = 'none';
+            document.getElementById('apt-detail').style.display = 'block';
+
+            // Title
+            document.getElementById('apt-title').textContent = apt.property_title || apt.property_id;
+
+            // Lead info
+            const leadInfo = document.getElementById('apt-lead-info');
+            leadInfo.innerHTML = `
+                <div class="profile-item"><span class="key">Nome</span><span class="val">${apt.lead_name}</span></div>
+                <div class="profile-item"><span class="key">WhatsApp</span><span class="val">${formatPhone(apt.lead_phone)}</span></div>
+                ${apt.lead_profile.interesse ? `<div class="profile-item"><span class="key">Interesse</span><span class="val">${apt.lead_profile.interesse}</span></div>` : ''}
+                ${apt.lead_profile.tipo_imovel ? `<div class="profile-item"><span class="key">Tipo</span><span class="val">${apt.lead_profile.tipo_imovel}</span></div>` : ''}
+                ${apt.lead_profile.cidade ? `<div class="profile-item"><span class="key">Cidade</span><span class="val">${apt.lead_profile.cidade}</span></div>` : ''}
+                ${apt.lead_profile.preco_max ? `<div class="profile-item"><span class="key">Preço máx</span><span class="val">R$ ${Number(apt.lead_profile.preco_max).toLocaleString('pt-BR')}</span></div>` : ''}
+            `;
+
+            // Property info
+            const propInfo = document.getElementById('apt-property-info');
+            propInfo.innerHTML = `
+                <div class="profile-item"><span class="key">Imóvel</span><span class="val">${apt.property_title || '-'}</span></div>
+                <div class="profile-item"><span class="key">Código</span><span class="val">${apt.property_id}</span></div>
+                <div class="profile-item"><span class="key">Data</span><span class="val">${apt.scheduled_date ? new Date(apt.scheduled_date).toLocaleDateString('pt-BR') : 'A combinar'}</span></div>
+            `;
+
+            // Status info
+            const statusLabels = { pending: 'Pendente', confirmed: 'Confirmada', completed: 'Realizada', cancelled: 'Cancelada' };
+            const statusInfo = document.getElementById('apt-status-info');
+            statusInfo.innerHTML = `
+                <div class="profile-item"><span class="key">Status</span><span class="val">${statusLabels[apt.status] || apt.status}</span></div>
+                <div class="profile-item"><span class="key">Criado</span><span class="val">${apt.created_at ? formatDate(apt.created_at) + ' ' + formatTime(apt.created_at) : '-'}</span></div>
+                ${apt.updated_at && apt.updated_at !== apt.created_at ? `<div class="profile-item"><span class="key">Atualizado</span><span class="val">${formatDate(apt.updated_at) + ' ' + formatTime(apt.updated_at)}</span></div>` : ''}
+            `;
+
+            // Action buttons based on status
+            const actions = document.getElementById('apt-actions');
+            let btns = '';
+            if (apt.status === 'pending') {
+                btns = `
+                    <button onclick="updateAptStatus('confirmed')" style="padding:8px;background:#10b981;color:#000;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">✅ Confirmar Visita</button>
+                    <button onclick="updateAptStatus('cancelled')" style="padding:8px;background:transparent;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Cancelar</button>
+                `;
+            } else if (apt.status === 'confirmed') {
+                btns = `
+                    <button onclick="updateAptStatus('completed')" style="padding:8px;background:#10b981;color:#000;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">🏠 Marcar como Realizada</button>
+                    <button onclick="updateAptStatus('cancelled')" style="padding:8px;background:transparent;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Cancelar</button>
+                `;
+            } else if (apt.status === 'cancelled') {
+                btns = `
+                    <button onclick="updateAptStatus('pending')" style="padding:8px;background:transparent;border:1px solid #3f3f46;color:#a1a1aa;border-radius:6px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">↩ Reabrir</button>
+                `;
+            }
+            actions.innerHTML = btns;
+
+            // Notes
+            document.getElementById('apt-notes').value = apt.notes || '';
+        }
+
+        async function updateAptStatus(newStatus) {
+            if (!currentAptId) return;
+            try {
+                const res = await fetch(`${API_BASE}/admin/appointments/${currentAptId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus }),
+                });
+                if (res.ok) {
+                    await loadAppointments();
+                    openAppointment(currentAptId);
+                }
+            } catch (e) {
+                console.error('Update status error:', e);
+            }
+        }
+
+        async function saveAppointmentNotes() {
+            if (!currentAptId) return;
+            const notes = document.getElementById('apt-notes').value;
+            try {
+                const res = await fetch(`${API_BASE}/admin/appointments/${currentAptId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notes }),
+                });
+                if (res.ok) {
+                    await loadAppointments();
+                    alert('Notas salvas!');
+                }
+            } catch (e) {
+                console.error('Save notes error:', e);
+            }
+        }
+
+        function backToAppointments() {
+            document.getElementById('apt-list').style.display = 'block';
+            document.getElementById('apt-detail').style.display = 'none';
+            currentAptId = null;
+        }
+
+        function openConversationFromApt() {
+            const apt = allAppointments.find(a => a.id === currentAptId);
+            if (apt) {
+                openConversation(apt.lead_id, apt.lead_name, apt.lead_phone);
+            }
         }
 
         // ─── Init ───

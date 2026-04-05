@@ -15,6 +15,7 @@ async def handle_schedule_visit(
     Creates an appointment record in PostgreSQL.
     """
     imovel_id = params.get("imovel_id", "")
+    titulo_imovel = params.get("titulo_imovel", imovel_id)
     data_preferencia = params.get("data_preferencia", "A combinar")
     periodo = params.get("periodo", "A combinar")
     observacoes = params.get("observacoes", "")
@@ -40,7 +41,7 @@ async def handle_schedule_visit(
                 lead_id=uuid.UUID(lead_id),
                 tenant_id=uuid.UUID(tenant_id),
                 property_id=imovel_id,
-                property_title=imovel_id,  # Will be enriched later with real title
+                property_title=titulo_imovel,
                 scheduled_date=scheduled_date,
                 status="pending",
                 notes=f"Período: {periodo}. {observacoes}".strip(),
