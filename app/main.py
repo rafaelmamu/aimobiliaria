@@ -1,7 +1,9 @@
 import logging
+import os
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 
 from app.api.health import router as health_router
 from app.api.webhooks import router as webhook_router
@@ -86,4 +88,12 @@ async def root():
         "version": "0.1.0",
         "status": "running",
         "docs": "/docs",
+        "dashboard": "/dashboard",
     }
+
+
+@app.get("/dashboard")
+async def dashboard():
+    """Serve the admin dashboard."""
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    return FileResponse(os.path.join(static_dir, "dashboard.html"))

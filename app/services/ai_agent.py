@@ -178,11 +178,11 @@ REGRAS IMPORTANTES:
 - Se o cliente mandar mensagem fora do contexto imobiliário, redirecione gentilmente
 
 FORMATO DE APRESENTAÇÃO DE IMÓVEIS:
-🏠 *{nome}*
-📍 {bairro}, {cidade}
-🛏 {quartos} quartos | 📐 {area}m²
-💰 R$ {preco}
-Cód: {codigo}
+🏠 *[titulo do imóvel]*
+📍 [bairro], [cidade]
+🛏 [quartos] quartos | 📐 [area]m²
+💰 R$ [preco]
+Cód: [codigo]
 """
 
 

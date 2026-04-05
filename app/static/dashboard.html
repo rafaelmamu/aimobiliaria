@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AImobiliarIA — Painel Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0b;
+            --bg-secondary: #111113;
+            --bg-card: #18181b;
+            --bg-card-hover: #1e1e22;
+            --border: #27272a;
+            --border-light: #3f3f46;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent: #10b981;
+            --accent-dim: #065f46;
+            --accent-light: #d1fae5;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+            --purple: #8b5cf6;
+            --inbound-bg: #1a2332;
+            --outbound-bg: #0d2818;
+            --radius: 10px;
+            --radius-sm: 6px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* ─── Layout ─── */
+        .app { display: flex; min-height: 100vh; }
+
+        .sidebar {
+            width: 240px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            z-index: 10;
+        }
+
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0 8px 24px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 24px;
+        }
+
+        .sidebar-logo .icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent), #059669);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .sidebar-logo h1 {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+
+        .sidebar-logo span {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: block;
+        }
+
+        .nav-section {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            padding: 0 8px;
+            margin-bottom: 8px;
+            margin-top: 20px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.15s;
+        }
+
+        .nav-item:hover { background: var(--bg-card); color: var(--text-primary); }
+        .nav-item.active { background: var(--accent-dim); color: var(--accent); }
+        .nav-item .badge {
+            margin-left: auto;
+            background: var(--accent);
+            color: #000;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 10px;
+        }
+
+        .sidebar-footer {
+            margin-top: auto;
+            padding: 16px 8px 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .sidebar-footer .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .sidebar-footer .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .main {
+            flex: 1;
+            margin-left: 240px;
+            padding: 32px;
+            max-width: 1200px;
+        }
+
+        /* ─── Header ─── */
+        .page-header {
+            margin-bottom: 28px;
+        }
+
+        .page-header h2 {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .page-header p {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        /* ─── Stats Grid ─── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            transition: border-color 0.2s;
+        }
+
+        .stat-card:hover { border-color: var(--border-light); }
+
+        .stat-card .label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: -1px;
+        }
+
+        .stat-card .sub {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .stat-card.accent .value { color: var(--accent); }
+        .stat-card.info .value { color: var(--info); }
+        .stat-card.warning .value { color: var(--warning); }
+        .stat-card.purple .value { color: var(--purple); }
+
+        /* ─── Table ─── */
+        .section-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .section-header h3 {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .section-header .filter-bar {
+            display: flex;
+            gap: 8px;
+        }
+
+        .filter-btn {
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 500;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            transition: all 0.15s;
+        }
+
+        .filter-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+        .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+
+        .table-wrapper { overflow-x: auto; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 10px 20px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 14px 20px;
+            font-size: 14px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: var(--bg-card-hover); }
+        tr { cursor: pointer; transition: background 0.1s; }
+
+        .lead-name {
+            font-weight: 600;
+            display: block;
+        }
+
+        .lead-phone {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .status-new { background: #1e3a5f; color: #60a5fa; }
+        .status-active { background: #1a3a2a; color: #4ade80; }
+        .status-qualified { background: #3b2f0a; color: #fbbf24; }
+        .status-converted { background: #1a3a2a; color: #10b981; }
+        .status-lost { background: #3b1a1a; color: #f87171; }
+
+        .time-ago {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ─── Conversation Panel ─── */
+        .conversation-panel {
+            display: none;
+        }
+
+        .conversation-panel.active {
+            display: block;
+        }
+
+        .conv-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .conv-back {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 18px;
+            padding: 4px;
+        }
+
+        .conv-back:hover { color: var(--text-primary); }
+
+        .conv-lead-info h4 {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .conv-lead-info span {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .conv-messages {
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .msg {
+            max-width: 75%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.5;
+            position: relative;
+        }
+
+        .msg-time {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .msg.inbound {
+            align-self: flex-start;
+            background: var(--inbound-bg);
+            border: 1px solid #1e3a5f;
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg.outbound {
+            align-self: flex-end;
+            background: var(--outbound-bg);
+            border: 1px solid #1a3a2a;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg.outbound .msg-label {
+            color: var(--accent);
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .msg.inbound .msg-label {
+            color: var(--info);
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        /* ─── Profile sidebar ─── */
+        .lead-profile {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+        }
+
+        .lead-profile h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 11px;
+        }
+
+        .profile-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .profile-item:last-child { border-bottom: none; }
+        .profile-item .key { color: var(--text-muted); }
+        .profile-item .val { font-weight: 500; text-align: right; }
+
+        /* ─── Loading & Empty ─── */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .loading .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+        /* ─── Conversation layout ─── */
+        .conv-layout {
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            gap: 20px;
+        }
+
+        /* ─── Refresh button ─── */
+        .refresh-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 6px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .refresh-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* ─── Responsive ─── */
+        @media (max-width: 1024px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .conv-layout { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar { display: none; }
+            .main { margin-left: 0; padding: 16px; }
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-logo">
+                <div class="icon">🏠</div>
+                <div>
+                    <h1>AImobiliarIA</h1>
+                    <span>Painel Admin</span>
+                </div>
+            </div>
+
+            <div class="nav-section">Principal</div>
+            <div class="nav-item active" onclick="showPage('dashboard')">
+                <span>📊</span> Dashboard
+            </div>
+            <div class="nav-item" onclick="showPage('leads')">
+                <span>👥</span> Leads
+                <span class="badge" id="leads-badge">0</span>
+            </div>
+            <div class="nav-item" onclick="showPage('conversations')">
+                <span>💬</span> Conversas
+            </div>
+
+            <div class="nav-section">Sistema</div>
+            <div class="nav-item" onclick="checkHealth()">
+                <span>🔧</span> Status
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="status">
+                    <span class="dot"></span>
+                    Sistema operacional
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Dashboard Page -->
+            <div id="page-dashboard">
+                <div class="page-header">
+                    <h2>Dashboard</h2>
+                    <p>Visão geral do atendimento — Upside Imóveis Exclusivos</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card accent">
+                        <div class="label">Total de Leads</div>
+                        <div class="value" id="stat-total-leads">-</div>
+                        <div class="sub">desde o início</div>
+                    </div>
+                    <div class="stat-card info">
+                        <div class="label">Leads Ativos</div>
+                        <div class="value" id="stat-active-leads">-</div>
+                        <div class="sub">em conversa</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="label">Mensagens</div>
+                        <div class="value" id="stat-messages">-</div>
+                        <div class="sub">total trocadas</div>
+                    </div>
+                    <div class="stat-card purple">
+                        <div class="label">Visitas Agendadas</div>
+                        <div class="value" id="stat-appointments">-</div>
+                        <div class="sub">agendamentos</div>
+                    </div>
+                </div>
+
+                <!-- Recent Leads -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>Leads Recentes</h3>
+                        <button class="refresh-btn" onclick="loadDashboard()">↻ Atualizar</button>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Lead</th>
+                                    <th>Status</th>
+                                    <th>Interesse</th>
+                                    <th>Última Mensagem</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-leads-table">
+                                <tr><td colspan="4" class="loading"><div class="spinner"></div>Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Leads Page -->
+            <div id="page-leads" style="display:none">
+                <div class="page-header">
+                    <h2>Leads</h2>
+                    <p>Todos os contatos que iniciaram conversa</p>
+                </div>
+
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>Lista de Leads</h3>
+                        <div class="filter-bar">
+                            <button class="filter-btn active" onclick="filterLeads(null, this)">Todos</button>
+                            <button class="filter-btn" onclick="filterLeads('new', this)">Novos</button>
+                            <button class="filter-btn" onclick="filterLeads('active', this)">Ativos</button>
+                            <button class="filter-btn" onclick="filterLeads('qualified', this)">Qualificados</button>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Lead</th>
+                                    <th>Status</th>
+                                    <th>Dados Coletados</th>
+                                    <th>Última Mensagem</th>
+                                    <th>Criado em</th>
+                                </tr>
+                            </thead>
+                            <tbody id="all-leads-table">
+                                <tr><td colspan="5" class="loading"><div class="spinner"></div>Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Conversations Page -->
+            <div id="page-conversations" style="display:none">
+                <div class="page-header">
+                    <h2>Conversas</h2>
+                    <p>Histórico completo das conversas com leads</p>
+                </div>
+
+                <!-- Leads list (shown first) -->
+                <div id="conv-list">
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h3>Selecione um lead para ver a conversa</h3>
+                            <button class="refresh-btn" onclick="loadConversationsList()">↻ Atualizar</button>
+                        </div>
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Lead</th>
+                                        <th>Status</th>
+                                        <th>Última Mensagem</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="conv-leads-table">
+                                    <tr><td colspan="3" class="loading"><div class="spinner"></div>Carregando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conversation detail (shown when lead selected) -->
+                <div id="conv-detail" class="conversation-panel">
+                    <div class="conv-layout">
+                        <div class="section-card">
+                            <div class="conv-header">
+                                <button class="conv-back" onclick="backToList()">←</button>
+                                <div class="conv-lead-info">
+                                    <h4 id="conv-lead-name">Lead</h4>
+                                    <span id="conv-lead-phone">+55...</span>
+                                </div>
+                                <button class="refresh-btn" onclick="loadConversation(currentLeadId)" style="margin-left:auto">↻</button>
+                            </div>
+                            <div class="conv-messages" id="conv-messages">
+                                <div class="empty-state">
+                                    <div class="icon">💬</div>
+                                    <p>Selecione um lead para ver as mensagens</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lead-profile" id="lead-profile">
+                            <h4>Perfil do Lead</h4>
+                            <div id="profile-data">
+                                <div class="profile-item">
+                                    <span class="key">Carregando...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        const TENANT_SLUG = 'upside';
+        let allLeads = [];
+        let currentLeadId = null;
+
+        // ─── Navigation ───
+        function showPage(page) {
+            document.querySelectorAll('.main > div[id^="page-"]').forEach(el => el.style.display = 'none');
+            document.getElementById(`page-${page}`).style.display = 'block';
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+
+            if (page === 'dashboard') loadDashboard();
+            if (page === 'leads') loadLeads();
+            if (page === 'conversations') loadConversationsList();
+        }
+
+        // ─── Dashboard ───
+        async function loadDashboard() {
+            try {
+                const [statsRes, leadsRes] = await Promise.all([
+                    fetch(`${API_BASE}/admin/tenants/${TENANT_SLUG}/stats`),
+                    fetch(`${API_BASE}/admin/tenants/${TENANT_SLUG}/leads`)
+                ]);
+                const stats = await statsRes.json();
+                const leads = await leadsRes.json();
+                allLeads = leads;
+
+                document.getElementById('stat-total-leads').textContent = stats.total_leads || 0;
+                document.getElementById('stat-active-leads').textContent = stats.active_leads || 0;
+                document.getElementById('stat-messages').textContent = stats.total_messages || 0;
+                document.getElementById('stat-appointments').textContent = stats.total_appointments || 0;
+                document.getElementById('leads-badge').textContent = stats.total_leads || 0;
+
+                renderLeadsTable('recent-leads-table', leads.slice(0, 10));
+            } catch (e) {
+                console.error('Dashboard error:', e);
+            }
+        }
+
+        // ─── Leads ───
+        async function loadLeads(status = null) {
+            try {
+                let url = `${API_BASE}/admin/tenants/${TENANT_SLUG}/leads`;
+                if (status) url += `?status=${status}`;
+                const res = await fetch(url);
+                const leads = await res.json();
+                allLeads = leads;
+                renderLeadsTable('all-leads-table', leads, true);
+            } catch (e) {
+                console.error('Leads error:', e);
+            }
+        }
+
+        function filterLeads(status, btn) {
+            document.querySelectorAll('.filter-btn').forEach(el => el.classList.remove('active'));
+            btn.classList.add('active');
+            loadLeads(status);
+        }
+
+        function renderLeadsTable(tableId, leads, showExtra = false) {
+            const tbody = document.getElementById(tableId);
+            if (!leads.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="icon">👥</div><p>Nenhum lead encontrado</p></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = leads.map(lead => {
+                const name = lead.name || 'Sem nome';
+                const phone = formatPhone(lead.whatsapp_number);
+                const status = lead.status || 'new';
+                const profile = lead.profile_data || {};
+                const interesse = profile.interesse || profile.transacao || '-';
+                const lastMsg = lead.last_message_at ? timeAgo(lead.last_message_at) : '-';
+                const created = lead.created_at ? formatDate(lead.created_at) : '-';
+
+                let extraCols = '';
+                if (showExtra) {
+                    const dados = [];
+                    if (profile.tipo_imovel) dados.push(profile.tipo_imovel);
+                    if (profile.cidade) dados.push(profile.cidade);
+                    if (profile.quartos_min) dados.push(profile.quartos_min + 'q');
+                    extraCols = `
+                        <td>${dados.join(', ') || '-'}</td>
+                        <td class="time-ago">${lastMsg}</td>
+                        <td class="time-ago">${created}</td>
+                    `;
+                } else {
+                    extraCols = `
+                        <td>${interesse}</td>
+                        <td class="time-ago">${lastMsg}</td>
+                    `;
+                }
+
+                return `
+                    <tr onclick="openConversation('${lead.id}', '${name}', '${lead.whatsapp_number}')">
+                        <td>
+                            <span class="lead-name">${name}</span>
+                            <span class="lead-phone">${phone}</span>
+                        </td>
+                        <td><span class="status-badge status-${status}">${status}</span></td>
+                        ${extraCols}
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // ─── Conversations ───
+        async function loadConversationsList() {
+            try {
+                const res = await fetch(`${API_BASE}/admin/tenants/${TENANT_SLUG}/leads`);
+                const leads = await res.json();
+                allLeads = leads;
+
+                const tbody = document.getElementById('conv-leads-table');
+                if (!leads.length) {
+                    tbody.innerHTML = '<tr><td colspan="3" class="empty-state"><div class="icon">💬</div><p>Nenhuma conversa ainda</p></td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = leads.map(lead => `
+                    <tr onclick="openConversation('${lead.id}', '${lead.name || 'Sem nome'}', '${lead.whatsapp_number}')">
+                        <td>
+                            <span class="lead-name">${lead.name || 'Sem nome'}</span>
+                            <span class="lead-phone">${formatPhone(lead.whatsapp_number)}</span>
+                        </td>
+                        <td><span class="status-badge status-${lead.status || 'new'}">${lead.status || 'new'}</span></td>
+                        <td class="time-ago">${lead.last_message_at ? timeAgo(lead.last_message_at) : '-'}</td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error('Conversations list error:', e);
+            }
+        }
+
+        async function openConversation(leadId, name, phone) {
+            currentLeadId = leadId;
+
+            // Switch to conversations page if not there
+            document.querySelectorAll('.main > div[id^="page-"]').forEach(el => el.style.display = 'none');
+            document.getElementById('page-conversations').style.display = 'block';
+
+            document.getElementById('conv-list').style.display = 'none';
+            document.getElementById('conv-detail').classList.add('active');
+            document.getElementById('conv-lead-name').textContent = name;
+            document.getElementById('conv-lead-phone').textContent = formatPhone(phone);
+
+            await loadConversation(leadId);
+            loadLeadProfile(leadId);
+        }
+
+        async function loadConversation(leadId) {
+            const container = document.getElementById('conv-messages');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div>Carregando...</div>';
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/leads/${leadId}/messages?limit=100`);
+                const messages = await res.json();
+
+                if (!messages.length) {
+                    container.innerHTML = '<div class="empty-state"><div class="icon">💬</div><p>Nenhuma mensagem ainda</p></div>';
+                    return;
+                }
+
+                container.innerHTML = messages.map(msg => {
+                    const isOut = msg.direction === 'outbound';
+                    const label = isOut ? '🤖 Agente' : '👤 Lead';
+                    const time = formatTime(msg.created_at);
+                    const content = msg.content.replace(/\n/g, '<br>').replace(/\*(.*?)\*/g, '<strong>$1</strong>');
+
+                    return `
+                        <div class="msg ${msg.direction}">
+                            <div class="msg-label">${label}</div>
+                            <div>${content}</div>
+                            <div class="msg-time">${time}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                container.scrollTop = container.scrollHeight;
+            } catch (e) {
+                container.innerHTML = '<div class="empty-state"><p>Erro ao carregar mensagens</p></div>';
+            }
+        }
+
+        function loadLeadProfile(leadId) {
+            const lead = allLeads.find(l => l.id === leadId);
+            const container = document.getElementById('profile-data');
+
+            if (!lead) {
+                container.innerHTML = '<div class="profile-item"><span class="key">Não encontrado</span></div>';
+                return;
+            }
+
+            const profile = lead.profile_data || {};
+            const items = [
+                ['Nome', lead.name || 'Não informado'],
+                ['WhatsApp', formatPhone(lead.whatsapp_number)],
+                ['Status', lead.status || 'new'],
+                ['Criado em', formatDate(lead.created_at)],
+            ];
+
+            // Add profile data
+            if (profile.interesse) items.push(['Interesse', profile.interesse]);
+            if (profile.tipo_imovel) items.push(['Tipo', profile.tipo_imovel]);
+            if (profile.cidade) items.push(['Cidade', profile.cidade]);
+            if (profile.bairro) items.push(['Bairro', profile.bairro]);
+            if (profile.quartos_min) items.push(['Quartos', profile.quartos_min]);
+            if (profile.preco_max) items.push(['Preço máx', 'R$ ' + Number(profile.preco_max).toLocaleString('pt-BR')]);
+
+            container.innerHTML = items.map(([key, val]) => `
+                <div class="profile-item">
+                    <span class="key">${key}</span>
+                    <span class="val">${val}</span>
+                </div>
+            `).join('');
+        }
+
+        function backToList() {
+            document.getElementById('conv-list').style.display = 'block';
+            document.getElementById('conv-detail').classList.remove('active');
+            currentLeadId = null;
+        }
+
+        // ─── Health ───
+        async function checkHealth() {
+            try {
+                const res = await fetch(`${API_BASE}/health`);
+                const data = await res.json();
+                alert(`Status: ${data.status}\nDatabase: ${data.services.database}\nRedis: ${data.services.redis}`);
+            } catch (e) {
+                alert('Erro ao verificar status do sistema');
+            }
+        }
+
+        // ─── Utilities ───
+        function formatPhone(phone) {
+            if (!phone) return '-';
+            const clean = phone.replace(/\D/g, '');
+            if (clean.length === 13) {
+                return `+${clean.slice(0,2)} (${clean.slice(2,4)}) ${clean.slice(4,9)}-${clean.slice(9)}`;
+            }
+            return phone;
+        }
+
+        function timeAgo(dateStr) {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diff = Math.floor((now - date) / 1000);
+
+            if (diff < 60) return 'agora';
+            if (diff < 3600) return `${Math.floor(diff/60)}min`;
+            if (diff < 86400) return `${Math.floor(diff/3600)}h`;
+            if (diff < 604800) return `${Math.floor(diff/86400)}d`;
+            return formatDate(dateStr);
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const d = new Date(dateStr);
+            return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+        }
+
+        function formatTime(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr);
+            return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // ─── Auto-refresh ───
+        setInterval(() => {
+            if (document.getElementById('page-dashboard').style.display !== 'none') {
+                loadDashboard();
+            }
+            if (currentLeadId) {
+                loadConversation(currentLeadId);
+            }
+        }, 15000); // Refresh every 15s
+
+        // ─── Init ───
+        loadDashboard();
+    </script>
+</body>
+</html>
