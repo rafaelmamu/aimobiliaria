@@ -21,3 +21,4 @@ httpx==0.28.1
 
 # Utilities
 python-json-logger==3.2.1
+python-multipart==0.0.20
