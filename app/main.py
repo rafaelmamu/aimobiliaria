@@ -2,9 +2,10 @@ import logging
 import os
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, RedirectResponse
 
+from app.api.auth import router as auth_router, verify_token
 from app.api.health import router as health_router
 from app.api.webhooks import router as webhook_router
 from app.api.admin import router as admin_router
@@ -75,7 +76,38 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+# ─────────────────────────────────────────────
+# Auth Middleware
+# ─────────────────────────────────────────────
+
+PROTECTED_PATHS = ["/dashboard", "/admin"]
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Protect /dashboard and /admin/* routes with session cookie."""
+    path = request.url.path
+
+    needs_auth = any(path.startswith(p) for p in PROTECTED_PATHS)
+
+    if needs_auth:
+        token = request.cookies.get("session")
+        if not verify_token(token):
+            if "application/json" in request.headers.get("accept", ""):
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Not authenticated"},
+                )
+            return RedirectResponse(url="/login", status_code=303)
+
+    response = await call_next(request)
+    return response
+
+
 # Include routers
+app.include_router(auth_router)
 app.include_router(health_router, tags=["health"])
 app.include_router(webhook_router, tags=["webhook"])
 app.include_router(admin_router)

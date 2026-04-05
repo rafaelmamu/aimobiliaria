@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = 86400  # 24 hours
     max_conversation_history: int = 30  # Max messages in context
 
+    # Admin Dashboard
+    admin_password: str = "change-me-now"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

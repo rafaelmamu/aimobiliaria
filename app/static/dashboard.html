@@ -544,6 +544,7 @@
                     <span class="dot"></span>
                     Sistema operacional
                 </div>
+                <a href="/auth/logout" style="display:block;margin-top:12px;font-size:12px;color:#71717a;text-decoration:none;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#71717a'">🚪 Sair</a>
             </div>
         </nav>
 
@@ -709,6 +710,17 @@
         const TENANT_SLUG = 'upside';
         let allLeads = [];
         let currentLeadId = null;
+
+        // ─── Auth check on API responses ───
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const response = await originalFetch(...args);
+            if (response.status === 401) {
+                window.location.href = '/login';
+                return response;
+            }
+            return response;
+        };
 
         // ─── Navigation ───
         function showPage(page) {
