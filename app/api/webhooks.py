@@ -11,6 +11,7 @@ from app.models.tenant import Tenant
 from app.redis_client import get_redis
 from app.services.ai_agent import AIAgent
 from app.services.lead_manager import LeadManager
+from app.services.notifications import NotificationService
 from app.services.property_api import MockPropertyAPIClient, PropertyAPIClient
 from app.services.session_manager import SessionManager
 from app.services.whatsapp import WhatsAppService
@@ -273,6 +274,56 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
             await session_mgr.add_message_to_history(
                 tenant_id, from_number, "assistant", response_text
             )
+
+            # 12. Send broker notifications if needed
+            broker_number = (tenant.config or {}).get("broker_notification_number")
+            if broker_number:
+                notifier = NotificationService(whatsapp, broker_number)
+                tool_names = [t["name"] for t in ai_result.get("tool_calls", [])]
+
+                # Notify on visit scheduled
+                if "agendar_visita" in tool_names:
+                    visit_call = next(
+                        t for t in ai_result["tool_calls"]
+                        if t["name"] == "agendar_visita"
+                    )
+                    visit_result = next(
+                        (r["result"] for r in ai_result.get("tool_results", [])
+                         if r["name"] == "agendar_visita"),
+                        {}
+                    )
+                    await notifier.notify_visit_scheduled(
+                        lead_name=sender_name or "Não informado",
+                        lead_phone=from_number,
+                        property_title=visit_result.get("imovel_codigo", ""),
+                        property_id=visit_call["input"].get("imovel_id", ""),
+                        date=visit_call["input"].get("data_preferencia", "A combinar"),
+                        period=visit_call["input"].get("periodo", "A combinar"),
+                        notes=visit_call["input"].get("observacoes", ""),
+                        protocol=visit_result.get("protocolo", ""),
+                    )
+
+                # Notify on human transfer
+                if "transferir_corretor" in tool_names:
+                    transfer_call = next(
+                        t for t in ai_result["tool_calls"]
+                        if t["name"] == "transferir_corretor"
+                    )
+                    # Build conversation summary from last messages
+                    history = session.get("conversation_history", [])
+                    summary_msgs = [
+                        m["content"][:100] for m in history[-6:]
+                        if m["role"] == "user"
+                    ]
+                    summary = " | ".join(summary_msgs) if summary_msgs else ""
+
+                    await notifier.notify_transfer_requested(
+                        lead_name=sender_name or "Não informado",
+                        lead_phone=from_number,
+                        reason=transfer_call["input"].get("motivo", ""),
+                        urgency=transfer_call["input"].get("urgencia", "media"),
+                        conversation_summary=summary,
+                    )
 
             logger.info(
                 f"Processed message from {from_number} for tenant {tenant.slug} "
