@@ -725,6 +725,7 @@
                                 <button class="filter-btn" onclick="filterAppointments('pending', this)">Pendentes</button>
                                 <button class="filter-btn" onclick="filterAppointments('confirmed', this)">Confirmadas</button>
                                 <button class="filter-btn" onclick="filterAppointments('completed', this)">Realizadas</button>
+                                <button class="filter-btn" onclick="filterAppointments('cancelled', this)">Canceladas</button>
                             </div>
                         </div>
                         <div class="table-wrapper">
@@ -1082,6 +1083,14 @@
             }
             if (currentLeadId) {
                 loadConversation(currentLeadId);
+            }
+            if (document.getElementById('page-appointments').style.display !== 'none') {
+                const activeBtn = document.querySelector('#page-appointments .filter-btn.active');
+                const currentFilter = activeBtn ? activeBtn.getAttribute('onclick').match(/'([^']*)'/)?.[1] || null : null;
+                loadAppointments(currentFilter === 'null' ? null : currentFilter);
+                if (currentAptId) {
+                    openAppointment(currentAptId);
+                }
             }
         }, 15000); // Refresh every 15s
 

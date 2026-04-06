@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,8 +39,6 @@ async def handle_cancel_visit(
         }
 
     # Build query to find the appointment
-    import uuid
-
     query = select(Appointment).where(
         Appointment.lead_id == uuid.UUID(lead_id),
         Appointment.status.in_(["pending", "confirmed"]),
@@ -61,7 +60,16 @@ async def handle_cancel_visit(
 
     old_status = appointment.status
     appointment.status = "cancelled_by_client"
-    await db_session.commit()
+
+    try:
+        await db_session.commit()
+    except Exception as e:
+        logger.error(f"Error cancelling appointment: {e}")
+        await db_session.rollback()
+        return {
+            "success": False,
+            "message": "Erro ao cancelar a visita. Por favor, tente novamente.",
+        }
 
     logger.info(
         f"Appointment {appointment.id} cancelled by client "
@@ -70,6 +78,7 @@ async def handle_cancel_visit(
 
     return {
         "success": True,
+        "appointment_id": str(appointment.id),
         "imovel_codigo": appointment.property_id,
         "titulo_imovel": appointment.property_title or "",
         "status_anterior": old_status,

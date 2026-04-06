@@ -1,9 +1,12 @@
 import logging
+import uuid
 from functools import partial
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.appointment import Appointment
 
 from app.config import get_settings
 from app.database import get_db
@@ -308,6 +311,51 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
                         notes=visit_call["input"].get("observacoes", ""),
                         protocol=visit_result.get("protocolo", ""),
                     )
+
+                    # Update broker_notified flag
+                    apt_id = visit_result.get("appointment_id")
+                    if apt_id:
+                        try:
+                            stmt = select(Appointment).where(
+                                Appointment.id == uuid.UUID(apt_id)
+                            )
+                            apt_row = await db.execute(stmt)
+                            apt = apt_row.scalar_one_or_none()
+                            if apt:
+                                apt.broker_notified = True
+                                await db.commit()
+                        except Exception as e:
+                            logger.error(f"Failed to update broker_notified: {e}")
+
+                # Notify on visit cancelled
+                if "cancelar_visita" in tool_names:
+                    cancel_result = next(
+                        (r["result"] for r in ai_result.get("tool_results", [])
+                         if r["name"] == "cancelar_visita"),
+                        {}
+                    )
+                    if cancel_result.get("success"):
+                        await notifier.notify_visit_cancelled(
+                            lead_name=sender_name or "Não informado",
+                            lead_phone=from_number,
+                            property_title=cancel_result.get("titulo_imovel", ""),
+                            property_id=cancel_result.get("imovel_codigo", ""),
+                        )
+
+                        # Update broker_notified flag
+                        apt_id = cancel_result.get("appointment_id")
+                        if apt_id:
+                            try:
+                                stmt = select(Appointment).where(
+                                    Appointment.id == uuid.UUID(apt_id)
+                                )
+                                apt_row = await db.execute(stmt)
+                                apt = apt_row.scalar_one_or_none()
+                                if apt:
+                                    apt.broker_notified = True
+                                    await db.commit()
+                            except Exception as e:
+                                logger.error(f"Failed to update broker_notified for cancellation: {e}")
 
                 # Notify on human transfer
                 if "transferir_corretor" in tool_names:
