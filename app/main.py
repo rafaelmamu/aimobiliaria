@@ -45,12 +45,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ Redis connection failed: {e}")
 
-    # Test database connection
+    # Test database connection and ensure tables exist
     try:
         async with engine.begin() as conn:
             from sqlalchemy import text
             await conn.execute(text("SELECT 1"))
         logger.info("✅ PostgreSQL connected")
+
+        # Ensure all tables exist (creates missing ones, safe to run always)
+        from app.database import Base
+        from app.models import Tenant, Lead, Message, PropertySearch, Appointment  # noqa
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("✅ Database tables synced")
     except Exception as e:
         logger.error(f"❌ PostgreSQL connection failed: {e}")
 
