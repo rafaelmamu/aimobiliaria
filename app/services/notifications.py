@@ -84,6 +84,25 @@ class NotificationService:
         )
         await self._send(message)
 
+    async def notify_visit_cancelled(
+        self,
+        lead_name: str,
+        lead_phone: str,
+        property_title: str,
+        property_id: str,
+    ):
+        """Notify broker about a visit cancelled by client."""
+        now = datetime.now(BR_TZ).strftime("%d/%m/%Y %H:%M")
+        message = (
+            f"❌ *Visita Cancelada pelo Cliente*\n\n"
+            f"👤 *Lead:* {lead_name or 'Não informado'}\n"
+            f"📱 *WhatsApp:* {lead_phone}\n"
+            f"🏠 *Imóvel:* {property_title} (Cód: {property_id})\n"
+            f"\n⏰ Cancelado em: {now}\n\n"
+            f"O cliente desmarcou o agendamento."
+        )
+        await self._send(message)
+
     async def _send(self, message: str):
         """Send notification message to broker."""
         try:

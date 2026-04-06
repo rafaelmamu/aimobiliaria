@@ -52,10 +52,22 @@ async def handle_schedule_visit(
             logger.info(f"Appointment saved: {protocol} for lead {lead_id}")
         except Exception as e:
             logger.error(f"Error saving appointment: {e}")
+            await db_session.rollback()
+            return {
+                "success": False,
+                "message": "Erro ao registrar a visita. Por favor, tente novamente.",
+            }
+    else:
+        logger.error("Missing db_session, lead_id, or tenant_id for scheduling")
+        return {
+            "success": False,
+            "message": "Erro interno ao processar agendamento.",
+        }
 
     return {
         "success": True,
         "protocolo": protocol,
+        "appointment_id": str(appointment.id),
         "imovel_codigo": imovel_id,
         "data_solicitada": data_preferencia,
         "periodo": periodo,
