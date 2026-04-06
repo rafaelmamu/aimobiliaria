@@ -215,6 +215,27 @@ TOOLS = [
             },
         },
     },
+    {
+        "name": "cancelar_visita",
+        "description": (
+            "Cancela uma visita previamente agendada pelo cliente. "
+            "Use quando o cliente pedir para cancelar, desistir ou desmarcar "
+            "uma visita a um imóvel. Precisa do código do imóvel ou do protocolo."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "imovel_id": {
+                    "type": "string",
+                    "description": "Código do imóvel cuja visita será cancelada",
+                },
+                "protocolo": {
+                    "type": "string",
+                    "description": "Protocolo do agendamento a ser cancelado",
+                },
+            },
+        },
+    },
 ]
 
 # ─────────────────────────────────────────────

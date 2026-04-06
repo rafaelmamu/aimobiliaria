@@ -315,6 +315,7 @@
         .status-qualified { background: #3b2f0a; color: #fbbf24; }
         .status-converted { background: #1a3a2a; color: #10b981; }
         .status-lost { background: #3b1a1a; color: #f87171; }
+        .status-cancelled-client { background: #3b2a0a; color: #fb923c; }
 
         .time-ago {
             font-size: 12px;
@@ -1119,6 +1120,7 @@
                     'confirmed': { cls: 'status-active', label: 'Confirmada' },
                     'completed': { cls: 'status-converted', label: 'Realizada' },
                     'cancelled': { cls: 'status-lost', label: 'Cancelada' },
+                    'cancelled_by_client': { cls: 'status-cancelled-client', label: 'Cancelado pelo cliente' },
                 };
                 const st = statusMap[apt.status] || statusMap['pending'];
                 const scheduledDate = apt.scheduled_date ? new Date(apt.scheduled_date).toLocaleDateString('pt-BR') : 'A combinar';
@@ -1172,7 +1174,7 @@
             `;
 
             // Status info
-            const statusLabels = { pending: 'Pendente', confirmed: 'Confirmada', completed: 'Realizada', cancelled: 'Cancelada' };
+            const statusLabels = { pending: 'Pendente', confirmed: 'Confirmada', completed: 'Realizada', cancelled: 'Cancelada', cancelled_by_client: 'Cancelado pelo cliente' };
             const statusInfo = document.getElementById('apt-status-info');
             statusInfo.innerHTML = `
                 <div class="profile-item"><span class="key">Status</span><span class="val">${statusLabels[apt.status] || apt.status}</span></div>
@@ -1193,7 +1195,7 @@
                     <button onclick="updateAptStatus('completed')" style="padding:8px;background:#10b981;color:#000;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">🏠 Marcar como Realizada</button>
                     <button onclick="updateAptStatus('cancelled')" style="padding:8px;background:transparent;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Cancelar</button>
                 `;
-            } else if (apt.status === 'cancelled') {
+            } else if (apt.status === 'cancelled' || apt.status === 'cancelled_by_client') {
                 btns = `
                     <button onclick="updateAptStatus('pending')" style="padding:8px;background:transparent;border:1px solid #3f3f46;color:#a1a1aa;border-radius:6px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">↩ Reabrir</button>
                 `;

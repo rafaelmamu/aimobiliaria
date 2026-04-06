@@ -283,7 +283,10 @@ async def update_appointment(
     if not apt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
+    valid_statuses = {"pending", "confirmed", "completed", "cancelled", "cancelled_by_client"}
     if data.status:
+        if data.status not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {data.status}")
         apt.status = data.status
     if data.notes is not None:
         apt.notes = data.notes
