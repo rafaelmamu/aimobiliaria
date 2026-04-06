@@ -1103,7 +1103,14 @@
                 let url = `${API_BASE}/admin/tenants/${TENANT_SLUG}/appointments`;
                 if (status) url += `?status=${status}`;
                 const res = await fetch(url);
-                allAppointments = await res.json();
+                if (!res.ok) {
+                    const err = await res.text();
+                    console.error('Appointments API error:', res.status, err);
+                    document.getElementById('appointments-table').innerHTML = `<tr><td colspan="5" class="empty-state"><div class="icon">⚠️</div><p>Erro ao carregar agendamentos (${res.status})</p></td></tr>`;
+                    return;
+                }
+                const data = await res.json();
+                allAppointments = Array.isArray(data) ? data : [];
                 renderAppointmentsTable(allAppointments);
             } catch (e) {
                 console.error('Appointments error:', e);

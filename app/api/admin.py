@@ -241,8 +241,13 @@ async def list_appointments(
         query = query.where(Appointment.status == status)
     query = query.order_by(Appointment.created_at.desc())
 
-    result = await db.execute(query)
-    rows = result.all()
+    try:
+        result = await db.execute(query)
+        rows = result.all()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error querying appointments: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
     return [
         {

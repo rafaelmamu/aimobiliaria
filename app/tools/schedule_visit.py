@@ -51,7 +51,7 @@ async def handle_schedule_visit(
             await db_session.commit()
             logger.info(f"Appointment saved: {protocol} for lead {lead_id}")
         except Exception as e:
-            logger.error(f"Error saving appointment: {e}")
+            logger.error(f"Error saving appointment: {e}", exc_info=True)
             await db_session.rollback()
             return {
                 "success": False,
