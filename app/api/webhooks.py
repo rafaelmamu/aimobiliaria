@@ -20,6 +20,7 @@ from app.tools.save_preferences import handle_save_preferences
 from app.tools.schedule_visit import handle_schedule_visit
 from app.tools.search_properties import handle_search_properties
 from app.tools.transfer_broker import handle_transfer_broker
+from app.tools.cancel_visit import handle_cancel_visit
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -226,6 +227,11 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
                 "salvar_preferencias": partial(
                     handle_save_preferences,
                     lead_manager=lead_mgr,
+                    lead_id=lead_id,
+                ),
+                "cancelar_visita": partial(
+                    handle_cancel_visit,
+                    db_session=db,
                     lead_id=lead_id,
                 ),
             }
