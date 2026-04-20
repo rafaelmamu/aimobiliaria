@@ -389,3 +389,63 @@ async def crm49_force_sync():
     """Trigger an immediate CRM49 sync and return the per-tenant result."""
     summary = await sync_all_tenants_once()
     return summary
+
+
+@router.get("/crm49/peek")
+async def crm49_peek(
+    q: str | None = None,
+    limit: int = 10,
+    db: AsyncSession = Depends(get_db),
+):
+    """Inspect cached listings — for debugging why a search returns zero.
+
+    Filters the Redis-cached listing by substring match (case + diacritic
+    insensitive) on bairro/titulo/descricao and returns the raw fields
+    the filter sees. Use when a search like `condominio=Colinas` comes
+    back empty and you want to verify the properties are in the cache
+    with the expected `tipo`/`bairro` values.
+    """
+    from app.services.property_filters import _fold
+
+    stmt = select(Tenant).where(Tenant.active == True)  # noqa: E712
+    result = await db.execute(stmt)
+    tenants = [t for t in result.scalars().all() if is_crm49_tenant(t)]
+
+    cache = PropertyCache(redis_client)
+    out: list[dict] = []
+    needle = _fold(q) if q else ""
+    for t in tenants:
+        props = await cache.get_listing(str(t.id)) or []
+        matched = []
+        for p in props:
+            if needle:
+                haystack = " ".join(
+                    _fold(p.get(f))
+                    for f in ("bairro", "titulo", "descricao")
+                )
+                if needle not in haystack:
+                    continue
+            matched.append(
+                {
+                    "id": p.get("id"),
+                    "codigo": p.get("codigo"),
+                    "tipo": p.get("tipo"),
+                    "_raw_tipo": p.get("_raw_tipo"),
+                    "transacao": p.get("transacao"),
+                    "bairro": p.get("bairro"),
+                    "cidade": p.get("cidade"),
+                    "titulo": p.get("titulo"),
+                    "preco": p.get("preco"),
+                }
+            )
+            if len(matched) >= limit:
+                break
+        out.append(
+            {
+                "tenant": t.slug,
+                "total_cached": len(props),
+                "matched": len(matched),
+                "sample": matched,
+            }
+        )
+    return {"query": q, "tenants": out}

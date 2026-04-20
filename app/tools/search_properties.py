@@ -15,6 +15,7 @@ async def handle_search_properties(
     logger.info(f"Searching properties with params: {params}")
 
     results = await property_client.search_properties(params)
+    logger.info(f"Search returned {len(results)} properties for params: {params}")
 
     if not results:
         return {
