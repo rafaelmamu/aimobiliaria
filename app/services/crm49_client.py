@@ -87,6 +87,13 @@ def _make_session(timeout_seconds: float, headers: dict[str, str]) -> aiohttp.Cl
     )
 
 
+def _proxy_url() -> str | None:
+    """Optional HTTPS proxy (e.g. Oracle SP) for CRM49 calls when the
+    upstream firewall blocks the app server's datacenter IP."""
+    from app.config import get_settings
+    return get_settings().crm49_http_proxy or None
+
+
 # Mapping from CRM49 `tipo_imovel` (free-text) to the enum used by the
 # `buscar_imoveis` tool (apartamento/casa/terreno/comercial/rural/chacara).
 TIPO_IMOVEL_MAP: dict[str, str] = {
@@ -259,7 +266,9 @@ class CRM49Client:
         try:
             async with _make_session(30.0, self.headers) as session:
                 async with session.get(
-                    f"{self.base_url}/properties", params=params
+                    f"{self.base_url}/properties",
+                    params=params,
+                    proxy=_proxy_url(),
                 ) as r:
                     r.raise_for_status()
                     return (await r.json()) or {}
@@ -321,7 +330,8 @@ class CRM49Client:
         try:
             async with _make_session(15.0, self.headers) as session:
                 async with session.get(
-                    f"{self.base_url}/properties/{property_id}"
+                    f"{self.base_url}/properties/{property_id}",
+                    proxy=_proxy_url(),
                 ) as r:
                     r.raise_for_status()
                     raw = await r.json()
