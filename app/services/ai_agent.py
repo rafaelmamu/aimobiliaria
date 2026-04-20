@@ -395,14 +395,42 @@ class AIAgent:
                                 {"name": tool_name, "result": result}
                             )
 
-                            # Collect images from property details
+                            # Collect images from property details.
+                            # Prefer the first real-size photo from `fotos` (only
+                            # the /properties/{id} endpoint returns these). Fall
+                            # back to the listing's miniature `foto_principal`.
                             if tool_name == "detalhes_imovel" and isinstance(result, dict):
-                                foto = result.get("foto_principal") or ""
-                                if foto and foto.startswith("http") and "placeholder" not in foto:
+                                fotos = result.get("fotos") or []
+                                foto = ""
+                                for candidate in fotos:
+                                    if (
+                                        isinstance(candidate, str)
+                                        and candidate.startswith("http")
+                                        and "placeholder" not in candidate
+                                    ):
+                                        foto = candidate
+                                        break
+                                if not foto:
+                                    fp = result.get("foto_principal") or ""
+                                    if (
+                                        isinstance(fp, str)
+                                        and fp.startswith("http")
+                                        and "placeholder" not in fp
+                                    ):
+                                        foto = fp
+                                if foto:
+                                    logger.info(
+                                        f"Queuing property image for {result.get('codigo', '?')}: {foto}"
+                                    )
                                     images_to_send.append({
                                         "url": foto,
                                         "caption": f"{result.get('titulo', 'Imóvel')} - Cód: {result.get('codigo', '')}",
                                     })
+                                else:
+                                    logger.warning(
+                                        f"detalhes_imovel for {result.get('codigo', '?')} "
+                                        "returned no usable photo URL"
+                                    )
 
                         except Exception as e:
                             logger.error(f"Tool handler error for {tool_name}: {e}")
