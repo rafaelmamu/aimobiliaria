@@ -52,13 +52,31 @@ class WhatsAppService:
     async def send_image_message(
         self, to: str, image_url: str, caption: str = ""
     ) -> dict:
-        """Send an image message (e.g., property photo)."""
+        """Send an image message (e.g., property photo).
+
+        Downloads the image server-side and uploads it to Meta's Media
+        endpoint first, then sends it by `media_id`. Meta silently drops
+        outbound images whose `link` URL it can't fetch cleanly (odd
+        User-Agent filters, cookies, redirects, etc.) — returning HTTP
+        200 either way. Uploading sidesteps that by letting Meta host
+        the bytes. Falls back to direct link mode if the upload fails.
+        """
+        media_id = await self._upload_media(image_url)
+
+        if media_id:
+            image_field: dict = {"id": media_id, "caption": caption}
+        else:
+            logger.warning(
+                f"Media upload failed for {image_url}; falling back to link mode"
+            )
+            image_field = {"link": image_url, "caption": caption}
+
         payload = {
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
             "to": to,
             "type": "image",
-            "image": {"link": image_url, "caption": caption},
+            "image": image_field,
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -67,7 +85,77 @@ class WhatsAppService:
                 headers=self.headers,
                 json=payload,
             )
-            return response.json()
+            result = response.json()
+            if response.status_code != 200:
+                logger.error(f"WhatsApp send image error: {result}")
+            return result
+
+    async def _upload_media(self, image_url: str) -> str | None:
+        """Download an image and upload it to Meta; returns the media_id.
+
+        Returns None on any failure so the caller can fall back to link
+        mode.
+        """
+        from urllib.parse import urlparse
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=30.0, follow_redirects=True
+            ) as client:
+                r = await client.get(image_url)
+                r.raise_for_status()
+                content = r.content
+                content_type = (
+                    r.headers.get("content-type", "image/jpeg")
+                    .split(";")[0]
+                    .strip()
+                    .lower()
+                )
+        except Exception as e:
+            logger.error(
+                f"Failed to download image {image_url}: {type(e).__name__}: {e}"
+            )
+            return None
+
+        # Meta rejects non-image content; guard the header
+        if not content_type.startswith("image/"):
+            logger.warning(
+                f"Unexpected content-type {content_type!r} for {image_url}; "
+                "skipping media upload"
+            )
+            return None
+
+        filename = urlparse(image_url).path.rsplit("/", 1)[-1] or "image.jpg"
+        upload_headers = {"Authorization": self.headers["Authorization"]}
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.post(
+                    f"{self.base_url}/media",
+                    headers=upload_headers,
+                    files={"file": (filename, content, content_type)},
+                    data={
+                        "messaging_product": "whatsapp",
+                        "type": content_type,
+                    },
+                )
+                if r.status_code != 200:
+                    logger.error(
+                        f"Meta media upload rejected ({r.status_code}): {r.text}"
+                    )
+                    return None
+                media_id = (r.json() or {}).get("id")
+                if media_id:
+                    logger.info(
+                        f"Media uploaded to Meta: {image_url} -> id={media_id} "
+                        f"({len(content)} bytes, {content_type})"
+                    )
+                return media_id
+        except Exception as e:
+            logger.error(
+                f"Meta media upload error for {image_url}: {type(e).__name__}: {e}"
+            )
+            return None
 
     async def mark_as_read(self, message_id: str) -> dict:
         """Mark a message as read (blue checkmarks)."""
