@@ -6,6 +6,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, RedirectResponse
 
+# DNS override must be installed before any httpx client is constructed
+from app.services.dns_override import install_ipv4_only_override
+
+install_ipv4_only_override()
+
 from app.api.auth import router as auth_router, verify_token
 from app.api.health import router as health_router
 from app.api.webhooks import router as webhook_router
