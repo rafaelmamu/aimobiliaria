@@ -1,9 +1,11 @@
 import asyncio
 import logging
 import re
+import socket
 from typing import Any
 
-import httpx
+import aiohttp
+from aiohttp.resolver import AsyncResolver
 import redis.asyncio as redis
 
 from app.services.property_cache import PropertyCache
@@ -12,45 +14,30 @@ from app.services.property_filters import apply_filters
 logger = logging.getLogger(__name__)
 
 
-# Retry knobs for transient DNS failures inside the container network.
-# Coolify's embedded DNS occasionally returns EAI_AGAIN for specific
-# domains; a short backoff almost always recovers.
-_DNS_RETRY_ATTEMPTS = 4
-_DNS_RETRY_BASE_DELAY = 1.0
+# External DNS servers used by aiodns to bypass Coolify's embedded
+# Docker resolver, which fails intermittently on www.upsideimoveis.com.br
+# with EAI_AGAIN (`Temporary failure in name resolution`).
+_EXTERNAL_NAMESERVERS = ["1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4"]
 
 
-def _is_dns_failure(exc: BaseException) -> bool:
-    msg = str(exc).lower()
-    return (
-        "temporary failure in name resolution" in msg
-        or "name or service not known" in msg
-        or "nodename nor servname" in msg
-        or "getaddrinfo failed" in msg
+def _make_session(timeout_seconds: float, headers: dict[str, str]) -> aiohttp.ClientSession:
+    """Build an aiohttp session with an external DNS resolver.
+
+    `family=AF_INET` forces IPv4 (the CRM49 domain has no AAAA record).
+    `AsyncResolver` uses aiodns + the explicit nameservers instead of the
+    container's /etc/resolv.conf.
+    """
+    resolver = AsyncResolver(nameservers=_EXTERNAL_NAMESERVERS)
+    connector = aiohttp.TCPConnector(
+        resolver=resolver,
+        family=socket.AF_INET,
+        ttl_dns_cache=300,
     )
-
-
-async def _get_with_retry(
-    client: httpx.AsyncClient, url: str, *, params=None, headers=None
-) -> httpx.Response:
-    """GET that retries with exponential backoff on DNS resolution errors."""
-    last_exc: Exception | None = None
-    for attempt in range(_DNS_RETRY_ATTEMPTS):
-        try:
-            r = await client.get(url, params=params, headers=headers)
-            r.raise_for_status()
-            return r
-        except httpx.HTTPError as e:
-            last_exc = e
-            if not _is_dns_failure(e) or attempt == _DNS_RETRY_ATTEMPTS - 1:
-                raise
-            delay = _DNS_RETRY_BASE_DELAY * (2 ** attempt)
-            logger.warning(
-                f"DNS failure on attempt {attempt + 1}/{_DNS_RETRY_ATTEMPTS} "
-                f"for {url}: {e}. Retrying in {delay:.1f}s"
-            )
-            await asyncio.sleep(delay)
-    assert last_exc is not None
-    raise last_exc
+    return aiohttp.ClientSession(
+        connector=connector,
+        headers=headers,
+        timeout=aiohttp.ClientTimeout(total=timeout_seconds),
+    )
 
 
 # Mapping from CRM49 `tipo_imovel` (free-text) to the enum used by the
@@ -223,15 +210,13 @@ class CRM49Client:
         if cidade:
             params["cidade"] = cidade
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                r = await _get_with_retry(
-                    client,
-                    f"{self.base_url}/properties",
-                    params=params,
-                    headers=self.headers,
-                )
-                return r.json() or {}
-        except httpx.HTTPError as e:
+            async with _make_session(30.0, self.headers) as session:
+                async with session.get(
+                    f"{self.base_url}/properties", params=params
+                ) as r:
+                    r.raise_for_status()
+                    return (await r.json()) or {}
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error(f"CRM49 list page {page} error: {e}")
             return {"pagination": {}, "data": []}
 
@@ -285,14 +270,13 @@ class CRM49Client:
                 return cached
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                r = await _get_with_retry(
-                    client,
-                    f"{self.base_url}/properties/{property_id}",
-                    headers=self.headers,
-                )
-                raw = r.json()
-        except httpx.HTTPError as e:
+            async with _make_session(15.0, self.headers) as session:
+                async with session.get(
+                    f"{self.base_url}/properties/{property_id}"
+                ) as r:
+                    r.raise_for_status()
+                    raw = await r.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error(f"CRM49 details error for {property_id}: {e}")
             return None
 
