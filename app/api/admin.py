@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -15,6 +15,7 @@ from app.redis_client import redis_client
 from app.services.crm49_client import is_crm49_tenant
 from app.services.property_cache import PropertyCache
 from app.services.property_sync import sync_all_tenants_once
+from app.services.session_manager import SessionManager
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -132,6 +133,45 @@ async def list_leads(
         }
         for l in leads
     ]
+
+
+@router.post("/leads/{lead_id}/reset-conversation")
+async def reset_lead_conversation(
+    lead_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Wipe a lead's conversation so the bot starts fresh on the next message.
+
+    Clears BOTH the Redis session AND the PostgreSQL `messages` rows for the
+    lead. Clearing only Redis is not enough: when the session expires, the
+    webhook restores history from the DB (`webhooks.py:180`), which would
+    resurrect the same context that made the bot say "no results".
+    """
+    try:
+        lead_uuid = uuid.UUID(lead_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid lead_id")
+
+    lead = await db.get(Lead, lead_uuid)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    result = await db.execute(
+        delete(Message).where(Message.lead_id == lead_uuid)
+    )
+    deleted = result.rowcount or 0
+
+    lead.last_message_at = None
+    await db.commit()
+
+    session_mgr = SessionManager(redis_client)
+    await session_mgr.delete_session(str(lead.tenant_id), lead.whatsapp_number)
+
+    return {
+        "success": True,
+        "lead_id": lead_id,
+        "messages_deleted": deleted,
+    }
 
 
 @router.get("/leads/{lead_id}/messages")
