@@ -45,26 +45,27 @@ class _CRM49Resolver(AbstractResolver):
         for ns in self._nameservers:
             r = dns.asyncresolver.Resolver(configure=False)
             r.nameservers = [ns]
-            r.timeout = 5.0
-            r.lifetime = 10.0
+            r.timeout = 3.0
+            r.lifetime = 4.0
             try:
                 answer = await r.resolve(host, "A")
+                addrs = [str(record.address) for record in answer]
+                logger.info(f"DNS {ns} resolved {host} -> {addrs}")
                 return [
                     {
                         "hostname": host,
-                        "host": str(record.address),
+                        "host": addr,
                         "port": port,
                         "family": socket.AF_INET,
                         "proto": 0,
                         "flags": 0,
                     }
-                    for record in answer
+                    for addr in addrs
                 ]
-            except dns.resolver.NoNameservers as e:
-                logger.warning(f"DNS {ns} failed for {host}: {e}")
-                last_exc = e
             except Exception as e:
-                logger.warning(f"DNS {ns} unexpected error for {host}: {e}")
+                logger.warning(
+                    f"DNS {ns} failed for {host}: {type(e).__name__}: {e}"
+                )
                 last_exc = e
         raise last_exc or RuntimeError(f"All nameservers failed for {host}")
 
@@ -263,7 +264,9 @@ class CRM49Client:
                     r.raise_for_status()
                     return (await r.json()) or {}
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.error(f"CRM49 list page {page} error: {e}")
+            logger.error(
+                f"CRM49 list page {page} error: {type(e).__name__}: {e!r}"
+            )
             return {"pagination": {}, "data": []}
 
     async def list_all_active(
@@ -323,7 +326,9 @@ class CRM49Client:
                     r.raise_for_status()
                     raw = await r.json()
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.error(f"CRM49 details error for {property_id}: {e}")
+            logger.error(
+                f"CRM49 details error for {property_id}: {type(e).__name__}: {e!r}"
+            )
             return None
 
         details = self._normalize_details(raw)
