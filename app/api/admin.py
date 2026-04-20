@@ -391,6 +391,50 @@ async def crm49_force_sync():
     return summary
 
 
+@router.get("/crm49/fetch-page")
+async def crm49_fetch_page(
+    page: int = 1,
+    per_page: int = 100,
+    db: AsyncSession = Depends(get_db),
+):
+    """Hit the CRM49 /properties endpoint for a specific page and return a
+    minimal summary so we can verify that pagination is actually working.
+
+    The sync is showing 1300 cached but only 50 unique ids — classic signal
+    that the upstream API ignores the `page` param and returns the same slice
+    every time. This endpoint lets us see per-page what we get back.
+    """
+    from app.services.crm49_client import CRM49Client
+
+    stmt = select(Tenant).where(Tenant.active == True)  # noqa: E712
+    result = await db.execute(stmt)
+    tenant = next(
+        (t for t in result.scalars().all() if is_crm49_tenant(t)),
+        None,
+    )
+    if not tenant:
+        return {"error": "no CRM49 tenant configured"}
+
+    client = CRM49Client(
+        base_url=tenant.api_base_url,
+        api_key=tenant.api_key,
+        tenant_id=str(tenant.id),
+        redis_client=redis_client,
+    )
+    raw = await client.list_properties_page(
+        page=page, per_page=per_page, status="Ativo"
+    )
+    data = raw.get("data") or []
+    return {
+        "tenant": tenant.slug,
+        "requested": {"page": page, "per_page": per_page},
+        "pagination": raw.get("pagination") or {},
+        "data_count": len(data),
+        "first_ids": [str(p.get("id") or p.get("codigo") or "") for p in data[:5]],
+        "last_ids": [str(p.get("id") or p.get("codigo") or "") for p in data[-5:]],
+    }
+
+
 @router.get("/crm49/peek")
 async def crm49_peek(
     q: str | None = None,
