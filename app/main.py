@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 
@@ -12,6 +13,7 @@ from app.api.admin import router as admin_router
 from app.config import get_settings
 from app.database import engine
 from app.redis_client import redis_client
+from app.services.property_sync import run_sync_loop
 
 settings = get_settings()
 
@@ -61,12 +63,28 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ PostgreSQL connection failed: {e}")
 
+    # Start CRM49 property sync loop in background (non-blocking)
+    sync_task: asyncio.Task | None = None
+    try:
+        sync_task = asyncio.create_task(run_sync_loop(), name="crm49-sync-loop")
+        logger.info("🔄 CRM49 sync loop scheduled")
+    except Exception as e:
+        logger.error(f"❌ Failed to schedule CRM49 sync loop: {e}")
+
     logger.info("✅ AImobiliarIA ready to receive messages!")
 
     yield
 
     # Shutdown
     logger.info("Shutting down...")
+    if sync_task and not sync_task.done():
+        sync_task.cancel()
+        try:
+            await sync_task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Error stopping sync task: {e}")
     await redis_client.close()
     await engine.dispose()
     logger.info("👋 AImobiliarIA stopped")

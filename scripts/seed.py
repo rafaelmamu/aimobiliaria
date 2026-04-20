@@ -19,6 +19,11 @@ from app.database import engine, async_session, Base
 from app.models import Tenant, Lead, Message, PropertySearch, Appointment
 
 
+# CRM49 / Upside Imóveis external API
+CRM49_BASE_URL = "https://www.upsideimoveis.com.br/crm/api/v1"
+CRM49_API_KEY = "by0p9r6zlqagys05euye55y0daigkgm3s1fw77qifes8wq7k718ljouaoi8qfui4"
+
+
 UPSIDE_SYSTEM_PROMPT = """Você é o assistente virtual da Upside Imóveis Exclusivos, especialista em ajudar clientes a encontrar o imóvel ideal na região do Vale do Paraíba (São José dos Campos, Jacareí, Santa Branca e região).
 
 PERSONALIDADE:
@@ -91,13 +96,33 @@ async def seed():
         existing = result.scalar_one_or_none()
 
         if existing:
-            print("   ⚠️  Tenant 'upside' already exists, skipping.")
+            # Backfill CRM49 credentials on existing tenants that still point to mock
+            updated_fields = []
+            if not existing.api_base_url:
+                existing.api_base_url = CRM49_BASE_URL
+                updated_fields.append("api_base_url")
+            if not existing.api_key:
+                existing.api_key = CRM49_API_KEY
+                updated_fields.append("api_key")
+
+            api_config = dict(existing.api_config or {})
+            if api_config.get("provider") != "crm49":
+                api_config["provider"] = "crm49"
+                existing.api_config = api_config
+                updated_fields.append("api_config.provider")
+
+            if updated_fields:
+                await db.commit()
+                print(f"   ✅ Tenant 'upside' updated: {', '.join(updated_fields)}")
+            else:
+                print("   ⚠️  Tenant 'upside' already exists and has CRM49 wired up.")
         else:
             tenant = Tenant(
                 name="Upside Imóveis Exclusivos",
                 slug="upside",
-                api_base_url=None,  # Will be set when API is ready
-                api_key=None,
+                api_base_url=CRM49_BASE_URL,
+                api_key=CRM49_API_KEY,
+                api_config={"provider": "crm49"},
                 whatsapp_phone_id="REPLACE_WITH_PHONE_NUMBER_ID",
                 whatsapp_token="REPLACE_WITH_ACCESS_TOKEN",
                 whatsapp_verify_token="upside-verify-2026",
@@ -128,11 +153,12 @@ async def seed():
             await db.commit()
             print(f"   ✅ Tenant created! ID: {tenant.id}")
             print(f"   📱 Webhook URL: https://api.aimobiliaria.com.br/webhook/whatsapp/upside")
+            print(f"   🔌 CRM49 API: {CRM49_BASE_URL}")
             print()
             print("   ⚠️  Don't forget to update:")
             print("      - whatsapp_phone_id (from Meta Business)")
             print("      - whatsapp_token (from Meta Business)")
-            print("      - api_base_url (when Upside API is ready)")
+            print("      - broker_notification_number (in config)")
 
     print()
     print("🎉 Seed complete!")
