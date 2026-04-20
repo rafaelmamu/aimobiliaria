@@ -418,13 +418,20 @@ async def crm49_raw(
     params = dict(request.query_params)
     # _path_suffix lets us test /properties/2, /properties/page/2, etc.
     path_suffix = params.pop("_path_suffix", "")
+    # _path_override replaces the entire /properties segment
+    # (e.g. /imoveis, /search, /all)
+    path_override = params.pop("_path_override", "")
     method = params.pop("_method", "GET").upper()
+    include_full_body = params.pop("_full", "") in ("1", "true", "yes")
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
         "Authorization": f"Bearer {tenant.api_key}",
     }
-    url = f"{tenant.api_base_url.rstrip('/')}/properties{path_suffix}"
+    base_path = path_override if path_override else "/properties"
+    if not base_path.startswith("/"):
+        base_path = "/" + base_path
+    url = f"{tenant.api_base_url.rstrip('/')}{base_path}{path_suffix}"
 
     try:
         async with _make_session(30.0, headers) as session:
@@ -441,16 +448,22 @@ async def crm49_raw(
         return {"error": f"{type(e).__name__}: {e}"}
 
     data = body.get("data") or []
-    return {
+    result = {
         "url": url,
         "method": method,
         "sent_params": params,
         "http_status": status,
         "pagination": body.get("pagination") or {},
+        "body_top_level_keys": list(body.keys()) if isinstance(body, dict) else [],
         "data_count": len(data),
         "first_ids": [str(p.get("id") or p.get("codigo") or "") for p in data[:5]],
         "last_ids": [str(p.get("id") or p.get("codigo") or "") for p in data[-5:]],
     }
+    if include_full_body:
+        # Strip data array (too big) but keep everything else
+        preview = {k: v for k, v in body.items() if k != "data"} if isinstance(body, dict) else body
+        result["body_preview"] = preview
+    return result
 
 
 @router.get("/crm49/fetch-page")
