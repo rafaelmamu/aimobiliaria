@@ -3,6 +3,8 @@ from typing import Any
 
 import httpx
 
+from app.services.property_filters import _fold
+
 logger = logging.getLogger(__name__)
 
 
@@ -258,7 +260,21 @@ class MockPropertyAPIClient(PropertyAPIClient):
                     match = False
 
             if "bairro" in filters and filters["bairro"]:
-                if filters["bairro"].lower() not in prop["bairro"].lower():
+                needle = _fold(filters["bairro"])
+                haystacks = (
+                    _fold(prop.get("bairro", "")),
+                    _fold(prop.get("titulo", "")),
+                    _fold(prop.get("descricao", "")),
+                )
+                if not any(needle in h for h in haystacks):
+                    match = False
+
+            if "condominio" in filters and filters["condominio"]:
+                needle = _fold(filters["condominio"])
+                if (
+                    needle not in _fold(prop.get("titulo", ""))
+                    and needle not in _fold(prop.get("descricao", ""))
+                ):
                     match = False
 
             if "quartos_min" in filters and filters["quartos_min"]:

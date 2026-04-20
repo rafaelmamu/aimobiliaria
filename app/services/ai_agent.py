@@ -53,6 +53,16 @@ TOOLS = [
                     "type": "string",
                     "description": "Bairro desejado (opcional)",
                 },
+                "condominio": {
+                    "type": "string",
+                    "description": (
+                        "Nome do condomínio ou empreendimento mencionado pelo "
+                        "cliente (ex: 'Condomínio Colinas', 'Esplanada do Sol'). "
+                        "Use isto, NÃO o campo bairro, quando o cliente citar um "
+                        "condomínio — condomínio não é bairro. Busca no título "
+                        "e descrição do imóvel."
+                    ),
+                },
                 "quartos_min": {
                     "type": "integer",
                     "description": "Número mínimo de quartos/dormitórios",
@@ -184,6 +194,14 @@ TOOLS = [
                     "items": {"type": "string"},
                     "description": "Bairros de interesse",
                 },
+                "condominio": {
+                    "type": "string",
+                    "description": (
+                        "Condomínio ou empreendimento específico de interesse "
+                        "(ex: 'Condomínio Colinas'). Separado de bairro porque "
+                        "condomínio não é bairro."
+                    ),
+                },
                 "quartos_min": {
                     "type": "integer",
                     "description": "Número mínimo de quartos",
@@ -283,6 +301,7 @@ REGRAS:
 - Se o cliente perguntar algo fora do contexto imobiliário, responda brevemente e redirecione com naturalidade
 - Quando o cliente mencionar financiamento, diga que a imobiliária auxilia no processo
 - Se o cliente perguntar por um bairro/cidade que não atendemos, informe gentilmente as regiões atendidas
+- Se o cliente mencionar um condomínio ou empreendimento específico (ex: "no Condomínio Colinas", "no Esplanada do Sol", "casa no condomínio X"), use o parâmetro `condominio` da tool `buscar_imoveis` — NÃO coloque o nome do condomínio no campo `bairro`, porque condomínio não é bairro (ex: Condomínio Colinas fica dentro do bairro Jardim das Colinas)
 
 REGRAS SOBRE FOTOS E DETALHES:
 - Quando o cliente pedir pra ver fotos, mais detalhes, ou mencionar o nome de um imóvel já apresentado, SEMPRE chame a tool detalhes_imovel — ela envia fotos automaticamente
