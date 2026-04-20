@@ -465,6 +465,20 @@ class AIAgent:
             if hasattr(block, "text"):
                 final_text += block.text
 
+        # Meta rejects messages with empty `text.body` (error 100). If
+        # Claude stopped after a tool call without saying anything (e.g.
+        # after salvar_preferencias), give the user a short acknowledgement
+        # so the turn doesn't look like the bot ghosted them.
+        if not final_text.strip():
+            called = [c["name"] for c in tool_calls]
+            logger.warning(
+                f"Claude returned no text after tools {called}; using fallback"
+            )
+            if "salvar_preferencias" in called:
+                final_text = "Anotei aqui! 😊 Me conta mais um pouco pra eu buscar as melhores opções pra você."
+            else:
+                final_text = "Só um instante! 😊"
+
         return {
             "response": final_text,
             "tool_calls": tool_calls,
