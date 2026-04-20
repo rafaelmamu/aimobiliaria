@@ -1,3 +1,14 @@
+import unicodedata
+
+
+def _fold(s: str | None) -> str:
+    """Lowercase and strip diacritics so "condominio" matches "Condomínio"."""
+    if not s:
+        return ""
+    nfkd = unicodedata.normalize("NFKD", s)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).lower()
+
+
 def apply_filters(properties: list[dict], filters: dict) -> list[dict]:
     """Apply local filters to a cached property list.
 
@@ -11,6 +22,7 @@ def apply_filters(properties: list[dict], filters: dict) -> list[dict]:
     tipo_imovel = filters.get("tipo_imovel")
     cidade = filters.get("cidade")
     bairro = filters.get("bairro")
+    condominio = filters.get("condominio")
     quartos_min = filters.get("quartos_min")
     preco_min = filters.get("preco_min")
     preco_max = filters.get("preco_max")
@@ -22,10 +34,28 @@ def apply_filters(properties: list[dict], filters: dict) -> list[dict]:
             continue
         if tipo_imovel and prop.get("tipo") != tipo_imovel:
             continue
-        if cidade and cidade.lower() not in (prop.get("cidade") or "").lower():
+        if cidade and _fold(cidade) not in _fold(prop.get("cidade")):
             continue
-        if bairro and bairro.lower() not in (prop.get("bairro") or "").lower():
-            continue
+        if bairro:
+            # Condomínios/empreendimentos muitas vezes não batem com o campo
+            # bairro oficial da CRM49 (ex: "Condomínio Colinas" vive no título,
+            # não no bairro "Jardim das Colinas"). Cai em título/descrição
+            # como fallback pra não perder esses casos. _fold ignora acentos
+            # porque clientes frequentemente digitam sem eles no WhatsApp.
+            needle = _fold(bairro)
+            haystacks = (
+                _fold(prop.get("bairro")),
+                _fold(prop.get("titulo")),
+                _fold(prop.get("descricao")),
+            )
+            if not any(needle in h for h in haystacks):
+                continue
+        if condominio:
+            needle = _fold(condominio)
+            titulo = _fold(prop.get("titulo"))
+            descricao = _fold(prop.get("descricao"))
+            if needle not in titulo and needle not in descricao:
+                continue
         if quartos_min and (prop.get("quartos") or 0) < quartos_min:
             continue
         preco = prop.get("preco") or 0
