@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # Admin Dashboard
     admin_password: str = "change-me-now"
 
+    # CRM49 sync (external property API)
+    crm49_sync_enabled: bool = True
+    crm49_sync_interval_minutes: int = 30
+    crm49_details_cache_ttl_seconds: int = 900
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
