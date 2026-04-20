@@ -394,16 +394,19 @@ async def crm49_force_sync():
 @router.get("/crm49/peek")
 async def crm49_peek(
     q: str | None = None,
+    tipo: str | None = None,
+    transacao: str | None = None,
     limit: int = 10,
     db: AsyncSession = Depends(get_db),
 ):
     """Inspect cached listings — for debugging why a search returns zero.
 
-    Filters the Redis-cached listing by substring match (case + diacritic
-    insensitive) on bairro/titulo/descricao and returns the raw fields
-    the filter sees. Use when a search like `condominio=Colinas` comes
-    back empty and you want to verify the properties are in the cache
-    with the expected `tipo`/`bairro` values.
+    Filters the Redis cache by optional substring on bairro/titulo/descricao
+    (`q`, case+diacritic insensitive), optional `tipo` (exact match on the
+    normalized field — casa/apartamento/terreno/…), and optional `transacao`
+    (venda/locacao). Deduplicates by id so we don't see the same property
+    repeated when the cache has duplicates. Also reports total_unique so we
+    can spot sync-level duplication.
     """
     from app.services.property_filters import _fold
 
@@ -416,8 +419,16 @@ async def crm49_peek(
     needle = _fold(q) if q else ""
     for t in tenants:
         props = await cache.get_listing(str(t.id)) or []
-        matched = []
+        seen: set[str] = set()
+        matched: list[dict] = []
         for p in props:
+            pid = p.get("id") or ""
+            if pid in seen:
+                continue
+            if tipo and p.get("tipo") != tipo:
+                continue
+            if transacao and p.get("transacao") != transacao:
+                continue
             if needle:
                 haystack = " ".join(
                     _fold(p.get(f))
@@ -425,13 +436,15 @@ async def crm49_peek(
                 )
                 if needle not in haystack:
                     continue
+            seen.add(pid)
             matched.append(
                 {
-                    "id": p.get("id"),
+                    "id": pid,
                     "codigo": p.get("codigo"),
                     "tipo": p.get("tipo"),
                     "_raw_tipo": p.get("_raw_tipo"),
                     "transacao": p.get("transacao"),
+                    "_raw_transacoes": p.get("_raw_transacoes"),
                     "bairro": p.get("bairro"),
                     "cidade": p.get("cidade"),
                     "titulo": p.get("titulo"),
@@ -440,12 +453,19 @@ async def crm49_peek(
             )
             if len(matched) >= limit:
                 break
+        unique_ids = {p.get("id") for p in props}
         out.append(
             {
                 "tenant": t.slug,
                 "total_cached": len(props),
+                "total_unique": len(unique_ids),
                 "matched": len(matched),
                 "sample": matched,
             }
         )
-    return {"query": q, "tenants": out}
+    return {
+        "query": q,
+        "filter_tipo": tipo,
+        "filter_transacao": transacao,
+        "tenants": out,
+    }
