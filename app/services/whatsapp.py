@@ -2,6 +2,8 @@ import logging
 
 import httpx
 
+from app.services.br_dns import make_br_session
+
 logger = logging.getLogger(__name__)
 
 META_API_BASE = "https://graph.facebook.com/v21.0"
@@ -98,19 +100,20 @@ class WhatsAppService:
         """
         from urllib.parse import urlparse
 
+        # Use the shared BR-aware session so BR property hosts that
+        # Docker's internal resolver can't reach (e.g. upsideimoveis.com.br)
+        # still resolve via our external nameservers.
         try:
-            async with httpx.AsyncClient(
-                timeout=30.0, follow_redirects=True
-            ) as client:
-                r = await client.get(image_url)
-                r.raise_for_status()
-                content = r.content
-                content_type = (
-                    r.headers.get("content-type", "image/jpeg")
-                    .split(";")[0]
-                    .strip()
-                    .lower()
-                )
+            async with make_br_session(timeout_seconds=30.0) as session:
+                async with session.get(image_url, allow_redirects=True) as r:
+                    r.raise_for_status()
+                    content = await r.read()
+                    content_type = (
+                        r.headers.get("content-type", "image/jpeg")
+                        .split(";")[0]
+                        .strip()
+                        .lower()
+                    )
         except Exception as e:
             logger.error(
                 f"Failed to download image {image_url}: {type(e).__name__}: {e}"
