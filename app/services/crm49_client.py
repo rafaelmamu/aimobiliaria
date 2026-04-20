@@ -4,8 +4,9 @@ import re
 import socket
 from typing import Any
 
+import aiodns
 import aiohttp
-from aiohttp.resolver import AsyncResolver
+from aiohttp.abc import AbstractResolver
 import redis.asyncio as redis
 
 from app.services.property_cache import PropertyCache
@@ -15,21 +16,48 @@ logger = logging.getLogger(__name__)
 
 
 # External DNS servers used by aiodns to bypass Coolify's embedded
-# Docker resolver, which fails intermittently on www.upsideimoveis.com.br
-# with EAI_AGAIN (`Temporary failure in name resolution`).
+# Docker resolver, which fails on www.upsideimoveis.com.br with
+# EAI_AGAIN (`Temporary failure in name resolution`).
 _EXTERNAL_NAMESERVERS = ["1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4"]
 
 
-def _make_session(timeout_seconds: float, headers: dict[str, str]) -> aiohttp.ClientSession:
-    """Build an aiohttp session with an external DNS resolver.
+class _CRM49Resolver(AbstractResolver):
+    """aiohttp-compatible resolver using aiodns.DNSResolver.query('A').
 
-    `family=AF_INET` forces IPv4 (the CRM49 domain has no AAAA record).
-    `AsyncResolver` uses aiodns + the explicit nameservers instead of the
-    container's /etc/resolv.conf.
+    We skip aiohttp's AsyncResolver because it calls aiodns' getaddrinfo
+    wrapper, whose signature is incompatible with older pycares shipped
+    on some images. `query('A')` is stable across aiodns 3.x and pycares
+    4.x and returns A records directly.
     """
-    resolver = AsyncResolver(nameservers=_EXTERNAL_NAMESERVERS)
+
+    def __init__(self, nameservers: list[str]):
+        self._resolver = aiodns.DNSResolver(nameservers=nameservers)
+
+    async def resolve(
+        self, host: str, port: int = 0, family: int = socket.AF_INET
+    ) -> list[dict]:
+        result = await self._resolver.query(host, "A")
+        return [
+            {
+                "hostname": host,
+                "host": r.host,
+                "port": port,
+                "family": socket.AF_INET,
+                "proto": 0,
+                "flags": 0,
+            }
+            for r in result
+        ]
+
+    async def close(self) -> None:
+        # aiodns DNSResolver has no async close; let GC collect it.
+        return None
+
+
+def _make_session(timeout_seconds: float, headers: dict[str, str]) -> aiohttp.ClientSession:
+    """Build an aiohttp session with our explicit external DNS resolver."""
     connector = aiohttp.TCPConnector(
-        resolver=resolver,
+        resolver=_CRM49Resolver(_EXTERNAL_NAMESERVERS),
         family=socket.AF_INET,
         ttl_dns_cache=300,
     )
