@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     crm49_sync_enabled: bool = True
     crm49_sync_interval_minutes: int = 30
     crm49_details_cache_ttl_seconds: int = 900
+    # Optional: route CRM49 calls through an HTTPS proxy (e.g. a Brazilian
+    # VPS) when the upstream firewall blocks the app server's datacenter IP.
+    # Example: "http://user:pass@proxy.sp.example.com:3128"
+    crm49_http_proxy: str | None = None
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

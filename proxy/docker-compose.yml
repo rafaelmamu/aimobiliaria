@@ -1,0 +1,16 @@
+version: "3.8"
+
+# Run this on a Brazilian VPS (e.g. Oracle Cloud Free Tier, São Paulo).
+# Once it's up, set CRM49_HTTP_PROXY in the main app's env to
+#   http://crm49:SENHA@<BR_VPS_PUBLIC_IP>:8888
+# and the CRM49Client will route all upstream calls through this proxy.
+
+services:
+  tinyproxy:
+    image: dannydirect/tinyproxy:latest
+    container_name: crm49-proxy
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./tinyproxy.conf:/etc/tinyproxy/tinyproxy.conf:ro
