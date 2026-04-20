@@ -56,6 +56,24 @@ LAZER_KEYWORDS = (
 HTML_TAG_RE = re.compile(r"<[^>]*>")
 
 
+def is_crm49_tenant(tenant) -> bool:
+    """Decide whether a tenant should use CRM49Client.
+
+    A tenant qualifies when `api_base_url` and `api_key` are set AND either:
+    - `api_config["provider"] == "crm49"`, or
+    - `api_base_url` points to `upsideimoveis.com.br` (URL-based auto-detect,
+      so a tenant seeded without `provider` still works).
+    """
+    base_url = getattr(tenant, "api_base_url", None)
+    api_key = getattr(tenant, "api_key", None)
+    if not base_url or not api_key:
+        return False
+    api_config = getattr(tenant, "api_config", None) or {}
+    if api_config.get("provider") == "crm49":
+        return True
+    return "upsideimoveis.com.br" in base_url.lower()
+
+
 def _limpar_html(s: str | None) -> str:
     if not s:
         return ""
