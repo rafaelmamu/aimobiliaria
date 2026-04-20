@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from typing import Any
@@ -9,6 +10,47 @@ from app.services.property_cache import PropertyCache
 from app.services.property_filters import apply_filters
 
 logger = logging.getLogger(__name__)
+
+
+# Retry knobs for transient DNS failures inside the container network.
+# Coolify's embedded DNS occasionally returns EAI_AGAIN for specific
+# domains; a short backoff almost always recovers.
+_DNS_RETRY_ATTEMPTS = 4
+_DNS_RETRY_BASE_DELAY = 1.0
+
+
+def _is_dns_failure(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return (
+        "temporary failure in name resolution" in msg
+        or "name or service not known" in msg
+        or "nodename nor servname" in msg
+        or "getaddrinfo failed" in msg
+    )
+
+
+async def _get_with_retry(
+    client: httpx.AsyncClient, url: str, *, params=None, headers=None
+) -> httpx.Response:
+    """GET that retries with exponential backoff on DNS resolution errors."""
+    last_exc: Exception | None = None
+    for attempt in range(_DNS_RETRY_ATTEMPTS):
+        try:
+            r = await client.get(url, params=params, headers=headers)
+            r.raise_for_status()
+            return r
+        except httpx.HTTPError as e:
+            last_exc = e
+            if not _is_dns_failure(e) or attempt == _DNS_RETRY_ATTEMPTS - 1:
+                raise
+            delay = _DNS_RETRY_BASE_DELAY * (2 ** attempt)
+            logger.warning(
+                f"DNS failure on attempt {attempt + 1}/{_DNS_RETRY_ATTEMPTS} "
+                f"for {url}: {e}. Retrying in {delay:.1f}s"
+            )
+            await asyncio.sleep(delay)
+    assert last_exc is not None
+    raise last_exc
 
 
 # Mapping from CRM49 `tipo_imovel` (free-text) to the enum used by the
@@ -182,12 +224,12 @@ class CRM49Client:
             params["cidade"] = cidade
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                r = await client.get(
+                r = await _get_with_retry(
+                    client,
                     f"{self.base_url}/properties",
                     params=params,
                     headers=self.headers,
                 )
-                r.raise_for_status()
                 return r.json() or {}
         except httpx.HTTPError as e:
             logger.error(f"CRM49 list page {page} error: {e}")
@@ -244,11 +286,11 @@ class CRM49Client:
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                r = await client.get(
+                r = await _get_with_retry(
+                    client,
                     f"{self.base_url}/properties/{property_id}",
                     headers=self.headers,
                 )
-                r.raise_for_status()
                 raw = r.json()
         except httpx.HTTPError as e:
             logger.error(f"CRM49 details error for {property_id}: {e}")
