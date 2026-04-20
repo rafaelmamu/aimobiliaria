@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -389,6 +389,57 @@ async def crm49_force_sync():
     """Trigger an immediate CRM49 sync and return the per-tenant result."""
     summary = await sync_all_tenants_once()
     return summary
+
+
+@router.get("/crm49/raw")
+async def crm49_raw(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Forward arbitrary query params to CRM49 /properties.
+
+    Our fixed-name page/per_page params are being ignored upstream. This
+    endpoint passes whatever query string comes in, so we can try
+    variants (pagina=2, p=2, offset=50, etc.) and see which one the
+    CRM49 API actually honors.
+    """
+    import aiohttp
+    from app.services.crm49_client import _make_session, _proxy_url
+
+    stmt = select(Tenant).where(Tenant.active == True)  # noqa: E712
+    result = await db.execute(stmt)
+    tenant = next(
+        (t for t in result.scalars().all() if is_crm49_tenant(t)),
+        None,
+    )
+    if not tenant:
+        return {"error": "no CRM49 tenant configured"}
+
+    params = dict(request.query_params)
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {tenant.api_key}",
+    }
+    url = f"{tenant.api_base_url.rstrip('/')}/properties"
+
+    try:
+        async with _make_session(30.0, headers) as session:
+            async with session.get(url, params=params, proxy=_proxy_url()) as r:
+                status = r.status
+                body = await r.json()
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}"}
+
+    data = body.get("data") or []
+    return {
+        "sent_params": params,
+        "http_status": status,
+        "pagination": body.get("pagination") or {},
+        "data_count": len(data),
+        "first_ids": [str(p.get("id") or p.get("codigo") or "") for p in data[:5]],
+        "last_ids": [str(p.get("id") or p.get("codigo") or "") for p in data[-5:]],
+    }
 
 
 @router.get("/crm49/fetch-page")
