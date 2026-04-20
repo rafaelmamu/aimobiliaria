@@ -686,7 +686,8 @@
                                     <h4 id="conv-lead-name">Lead</h4>
                                     <span id="conv-lead-phone">+55...</span>
                                 </div>
-                                <button class="refresh-btn" onclick="loadConversation(currentLeadId)" style="margin-left:auto">↻</button>
+                                <button class="refresh-btn" onclick="resetConversation()" style="margin-left:auto;color:#f59e0b;border-color:#f59e0b" title="Apagar todo o histórico desta conversa para o bot começar do zero">🗑 Limpar conversa</button>
+                                <button class="refresh-btn" onclick="loadConversation(currentLeadId)" style="margin-left:8px" title="Recarregar">↻</button>
                             </div>
                             <div class="conv-messages" id="conv-messages">
                                 <div class="empty-state">
@@ -1029,6 +1030,27 @@
             document.getElementById('conv-list').style.display = 'block';
             document.getElementById('conv-detail').classList.remove('active');
             currentLeadId = null;
+        }
+
+        async function resetConversation() {
+            if (!currentLeadId) return;
+            const lead = allLeads.find(l => l.id === currentLeadId);
+            const name = lead?.name || lead?.whatsapp_number || 'este lead';
+            if (!confirm(`Apagar TODO o histórico de conversa de ${name}?\n\nO bot vai começar uma conversa nova na próxima mensagem. Esta ação não pode ser desfeita.`)) return;
+            try {
+                const res = await fetch(`${API_BASE}/admin/leads/${currentLeadId}/reset-conversation`, { method: 'POST' });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    alert(`Erro ao limpar: ${err.detail || res.statusText}`);
+                    return;
+                }
+                const data = await res.json();
+                alert(`Histórico limpo! ${data.messages_deleted} mensagens apagadas.\nA próxima mensagem do lead começará uma conversa nova.`);
+                await loadConversation(currentLeadId);
+            } catch (e) {
+                console.error('Reset error:', e);
+                alert('Erro ao limpar histórico. Veja o console.');
+            }
         }
 
         // ─── Health ───
