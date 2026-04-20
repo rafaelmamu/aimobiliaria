@@ -11,6 +11,10 @@ from app.models.appointment import Appointment
 from app.models.lead import Lead
 from app.models.message import Message
 from app.models.tenant import Tenant
+from app.redis_client import redis_client
+from app.services.crm49_client import is_crm49_tenant
+from app.services.property_cache import PropertyCache
+from app.services.property_sync import sync_all_tenants_once
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -306,3 +310,42 @@ async def update_appointment(
     await db.commit()
 
     return {"success": True, "status": apt.status}
+
+
+# ─────────────────────────────────────────────
+# CRM49 Sync Endpoints (diagnostics + force-refresh)
+# ─────────────────────────────────────────────
+
+
+@router.get("/crm49/status")
+async def crm49_sync_status(db: AsyncSession = Depends(get_db)):
+    """Inspect CRM49 sync state per tenant without touching any logs."""
+    stmt = select(Tenant).where(Tenant.active == True)  # noqa: E712
+    result = await db.execute(stmt)
+    tenants = list(result.scalars().all())
+
+    cache = PropertyCache(redis_client)
+    out: list[dict] = []
+    for t in tenants:
+        is_crm49 = is_crm49_tenant(t)
+        cached = await cache.get_listing(str(t.id)) if is_crm49 else []
+        last_sync = await cache.get_last_sync(str(t.id)) if is_crm49 else None
+        out.append(
+            {
+                "slug": t.slug,
+                "is_crm49": is_crm49,
+                "has_api_base_url": bool(t.api_base_url),
+                "has_api_key": bool(t.api_key),
+                "provider": (t.api_config or {}).get("provider"),
+                "cached_count": len(cached),
+                "last_sync": last_sync.isoformat() if last_sync else None,
+            }
+        )
+    return {"tenants": out}
+
+
+@router.post("/crm49/sync")
+async def crm49_force_sync():
+    """Trigger an immediate CRM49 sync and return the per-tenant result."""
+    summary = await sync_all_tenants_once()
+    return summary

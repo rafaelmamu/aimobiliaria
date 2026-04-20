@@ -15,7 +15,7 @@ from app.redis_client import get_redis
 from app.services.ai_agent import AIAgent
 from app.services.lead_manager import LeadManager
 from app.services.notifications import NotificationService
-from app.services.crm49_client import CRM49Client
+from app.services.crm49_client import CRM49Client, is_crm49_tenant
 from app.services.property_api import MockPropertyAPIClient, PropertyAPIClient
 from app.services.session_manager import SessionManager
 from app.services.whatsapp import WhatsAppService
@@ -200,10 +200,7 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
             )
 
             # 5. Create property API client
-            api_config = tenant.api_config or {}
-            provider = api_config.get("provider")
-
-            if provider == "crm49" and tenant.api_base_url and tenant.api_key:
+            if is_crm49_tenant(tenant):
                 property_client = CRM49Client(
                     base_url=tenant.api_base_url,
                     api_key=tenant.api_key,
@@ -214,7 +211,7 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
                 property_client = PropertyAPIClient(
                     base_url=tenant.api_base_url,
                     api_key=tenant.api_key,
-                    config=api_config,
+                    config=tenant.api_config or {},
                 )
             else:
                 property_client = MockPropertyAPIClient(

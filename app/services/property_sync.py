@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.database import async_session
 from app.models.tenant import Tenant
 from app.redis_client import redis_client
-from app.services.crm49_client import CRM49Client
+from app.services.crm49_client import CRM49Client, is_crm49_tenant
 from app.services.property_cache import PropertyCache
 
 logger = logging.getLogger(__name__)
@@ -22,12 +22,11 @@ async def sync_tenant_properties(tenant: Tenant) -> int:
     a CRM49 tenant / the sync failed / the API returned nothing.
     On failure the previous cache snapshot is preserved.
     """
-    api_config = tenant.api_config or {}
-    if api_config.get("provider") != "crm49":
-        return 0
-    if not tenant.api_base_url or not tenant.api_key:
-        logger.warning(
-            f"Tenant {tenant.slug} marked as CRM49 but missing api_base_url/api_key"
+    if not is_crm49_tenant(tenant):
+        logger.debug(
+            f"Skipping tenant {tenant.slug}: not a CRM49 tenant "
+            f"(has_url={bool(tenant.api_base_url)}, has_key={bool(tenant.api_key)}, "
+            f"provider={(tenant.api_config or {}).get('provider')!r})"
         )
         return 0
 
@@ -66,21 +65,46 @@ async def sync_tenant_properties(tenant: Tenant) -> int:
     return len(properties)
 
 
-async def sync_all_tenants_once() -> None:
-    """One pass of the sync across all active CRM49 tenants."""
+async def sync_all_tenants_once() -> dict:
+    """One pass of the sync across all active CRM49 tenants.
+
+    Returns a summary dict so callers (admin endpoint, tests) can inspect
+    what happened without scraping logs.
+    """
     async with async_session() as db:
         stmt = select(Tenant).where(Tenant.active == True)  # noqa: E712
         result = await db.execute(stmt)
         tenants = list(result.scalars().all())
 
-    for tenant in tenants:
+    crm49_tenants = [t for t in tenants if is_crm49_tenant(t)]
+    logger.info(
+        f"CRM49 sync iteration starting: {len(tenants)} active tenant(s), "
+        f"{len(crm49_tenants)} CRM49"
+    )
+    if not crm49_tenants:
+        logger.warning(
+            "No CRM49 tenants found. Ensure the Upside tenant has api_base_url, "
+            "api_key, and api_config.provider='crm49' (or api_base_url pointing to "
+            "upsideimoveis.com.br)."
+        )
+
+    results: list[dict] = []
+    for tenant in crm49_tenants:
         try:
-            await sync_tenant_properties(tenant)
+            count = await sync_tenant_properties(tenant)
+            results.append({"slug": tenant.slug, "synced": count})
         except Exception as e:
             logger.error(
                 f"Unexpected error syncing tenant {tenant.slug}: {e}",
                 exc_info=True,
             )
+            results.append({"slug": tenant.slug, "synced": 0, "error": str(e)})
+
+    return {
+        "total_tenants": len(tenants),
+        "crm49_tenants": len(crm49_tenants),
+        "results": results,
+    }
 
 
 async def run_sync_loop() -> None:
