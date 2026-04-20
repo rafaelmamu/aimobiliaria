@@ -4,8 +4,9 @@ import re
 import socket
 from typing import Any
 
-import aiodns
 import aiohttp
+import dns.asyncresolver
+import dns.resolver
 from aiohttp.abc import AbstractResolver
 import redis.asyncio as redis
 
@@ -15,42 +16,59 @@ from app.services.property_filters import apply_filters
 logger = logging.getLogger(__name__)
 
 
-# External DNS servers used by aiodns to bypass Coolify's embedded
-# Docker resolver, which fails on www.upsideimoveis.com.br with
-# EAI_AGAIN (`Temporary failure in name resolution`).
-_EXTERNAL_NAMESERVERS = ["1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4"]
+# External DNS servers used to bypass Coolify's embedded Docker
+# resolver, which fails on www.upsideimoveis.com.br with EAI_AGAIN.
+# Order matters: Quad9 (9.9.9.9) currently returns a clean answer for
+# upsideimoveis.com.br while Cloudflare and Google return SERVFAIL,
+# most likely due to DNSSEC validation on the domain's authoritative
+# servers. We try each in order and fall back on SERVFAIL.
+_EXTERNAL_NAMESERVERS = ["9.9.9.9", "149.112.112.112", "1.1.1.1", "8.8.8.8"]
 
 
 class _CRM49Resolver(AbstractResolver):
-    """aiohttp-compatible resolver using aiodns.DNSResolver.query('A').
+    """aiohttp-compatible resolver using dnspython.
 
-    We skip aiohttp's AsyncResolver because it calls aiodns' getaddrinfo
-    wrapper, whose signature is incompatible with older pycares shipped
-    on some images. `query('A')` is stable across aiodns 3.x and pycares
-    4.x and returns A records directly.
+    dnspython is pure-Python (no pycares C-ABI to misalign with the
+    installed wheel). The explicit nameservers sidestep /etc/resolv.conf.
+    On SERVFAIL from one server we try the next — `Resolver.nameservers`
+    doesn't automatically fall through when the server returns a
+    definitive error, so we iterate manually.
     """
 
     def __init__(self, nameservers: list[str]):
-        self._resolver = aiodns.DNSResolver(nameservers=nameservers)
+        self._nameservers = list(nameservers)
 
     async def resolve(
         self, host: str, port: int = 0, family: int = socket.AF_INET
     ) -> list[dict]:
-        result = await self._resolver.query(host, "A")
-        return [
-            {
-                "hostname": host,
-                "host": r.host,
-                "port": port,
-                "family": socket.AF_INET,
-                "proto": 0,
-                "flags": 0,
-            }
-            for r in result
-        ]
+        last_exc: Exception | None = None
+        for ns in self._nameservers:
+            r = dns.asyncresolver.Resolver(configure=False)
+            r.nameservers = [ns]
+            r.timeout = 5.0
+            r.lifetime = 10.0
+            try:
+                answer = await r.resolve(host, "A")
+                return [
+                    {
+                        "hostname": host,
+                        "host": str(record.address),
+                        "port": port,
+                        "family": socket.AF_INET,
+                        "proto": 0,
+                        "flags": 0,
+                    }
+                    for record in answer
+                ]
+            except dns.resolver.NoNameservers as e:
+                logger.warning(f"DNS {ns} failed for {host}: {e}")
+                last_exc = e
+            except Exception as e:
+                logger.warning(f"DNS {ns} unexpected error for {host}: {e}")
+                last_exc = e
+        raise last_exc or RuntimeError(f"All nameservers failed for {host}")
 
     async def close(self) -> None:
-        # aiodns DNSResolver has no async close; let GC collect it.
         return None
 
 

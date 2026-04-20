@@ -19,13 +19,11 @@ anthropic==0.43.0
 # HTTP Client
 httpx==0.28.1
 
-# aiohttp + aiodns: bypass system DNS for the CRM49 client
-# (Coolify's embedded resolver fails on www.upsideimoveis.com.br)
-# pycares must be >=4.4 — aiodns 3.2 changed Channel.getaddrinfo to
-# pass the callback as positional, which older pycares rejects.
+# aiohttp + dnspython: bypass Coolify's embedded DNS for the CRM49
+# client. dnspython is pure-Python and avoids the pycares C-ABI
+# mismatch that plagued the aiodns path.
 aiohttp==3.11.10
-aiodns==3.2.0
-pycares>=4.4.0
+dnspython==2.7.0
 
 # Utilities
 python-json-logger==3.2.1
