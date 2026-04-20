@@ -416,23 +416,34 @@ async def crm49_raw(
         return {"error": "no CRM49 tenant configured"}
 
     params = dict(request.query_params)
+    # _path_suffix lets us test /properties/2, /properties/page/2, etc.
+    path_suffix = params.pop("_path_suffix", "")
+    method = params.pop("_method", "GET").upper()
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
         "Authorization": f"Bearer {tenant.api_key}",
     }
-    url = f"{tenant.api_base_url.rstrip('/')}/properties"
+    url = f"{tenant.api_base_url.rstrip('/')}/properties{path_suffix}"
 
     try:
         async with _make_session(30.0, headers) as session:
-            async with session.get(url, params=params, proxy=_proxy_url()) as r:
+            req = session.get(url, params=params, proxy=_proxy_url())
+            if method == "POST":
+                req = session.post(url, json=params, proxy=_proxy_url())
+            async with req as r:
                 status = r.status
-                body = await r.json()
+                try:
+                    body = await r.json()
+                except Exception:
+                    body = {"raw_text": (await r.text())[:500]}
     except Exception as e:
         return {"error": f"{type(e).__name__}: {e}"}
 
     data = body.get("data") or []
     return {
+        "url": url,
+        "method": method,
         "sent_params": params,
         "http_status": status,
         "pagination": body.get("pagination") or {},
