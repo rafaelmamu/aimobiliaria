@@ -421,6 +421,10 @@ async def crm49_raw(
     # _path_override replaces the entire /properties segment
     # (e.g. /imoveis, /search, /all)
     path_override = params.pop("_path_override", "")
+    # _base_override replaces the tenant's api_base_url entirely, so we can
+    # test the documented upstream (websitesparaimobiliarias.com.br) directly
+    # and bypass any cache/proxy that sits in front of upsideimoveis.com.br.
+    base_override = params.pop("_base_override", "")
     method = params.pop("_method", "GET").upper()
     include_full_body = params.pop("_full", "") in ("1", "true", "yes")
     headers = {
@@ -431,7 +435,8 @@ async def crm49_raw(
     base_path = path_override if path_override else "/properties"
     if not base_path.startswith("/"):
         base_path = "/" + base_path
-    url = f"{tenant.api_base_url.rstrip('/')}{base_path}{path_suffix}"
+    base_url = base_override.rstrip("/") if base_override else tenant.api_base_url.rstrip("/")
+    url = f"{base_url}{base_path}{path_suffix}"
 
     try:
         async with _make_session(30.0, headers) as session:
