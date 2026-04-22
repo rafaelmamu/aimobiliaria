@@ -242,10 +242,15 @@ class CRM49Client:
         self.api_key = api_key
         self.tenant_id = tenant_id
         self.cache = PropertyCache(redis_client) if redis_client is not None else None
+        # Minimal headers only. The Code49 backend silently caps /properties
+        # to 50 items (ignoring page/per_page) when the request includes
+        # Accept/Content-Type: application/json or the aiohttp default
+        # User-Agent. Confirmed via /admin/crm49/raw?_strip_extra=1 on
+        # 2026-04-22. Match curl's surface so the upstream treats us as
+        # an "integrator" rather than an "automated scraper".
         self.headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
+            "User-Agent": "curl/8.0.0",
         }
 
     # ─────────────────────────────────────────────
