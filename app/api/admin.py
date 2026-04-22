@@ -427,11 +427,18 @@ async def crm49_raw(
     base_override = params.pop("_base_override", "")
     method = params.pop("_method", "GET").upper()
     include_full_body = params.pop("_full", "") in ("1", "true", "yes")
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {tenant.api_key}",
-    }
+    strip_extra = params.pop("_strip_extra", "") in ("1", "true", "yes")
+    if strip_extra:
+        headers = {
+            "Authorization": f"Bearer {tenant.api_key}",
+            "User-Agent": "curl/8.0.0",
+        }
+    else:
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {tenant.api_key}",
+        }
     base_path = path_override if path_override else "/properties"
     if not base_path.startswith("/"):
         base_path = "/" + base_path
@@ -469,6 +476,29 @@ async def crm49_raw(
         preview = {k: v for k, v in body.items() if k != "data"} if isinstance(body, dict) else body
         result["body_preview"] = preview
     return result
+
+
+@router.get("/crm49/egress-ip")
+async def crm49_egress_ip():
+    """Return the public IP that CRM49 sees when our server calls it.
+
+    Uses the same aiohttp session + custom DNS resolver + proxy as the
+    real client, so whatever IP api.ipify.org reports is the exact IP
+    Code49 would see. Useful to check whether our datacenter IP is in
+    a rate-limited bucket on their side.
+    """
+    from app.services.crm49_client import _make_session, _proxy_url
+
+    try:
+        async with _make_session(15.0, {"User-Agent": "curl/8.0.0"}) as session:
+            async with session.get(
+                "https://api.ipify.org?format=json",
+                proxy=_proxy_url(),
+            ) as r:
+                body = await r.json()
+        return {"egress_ip": body.get("ip"), "via_proxy": bool(_proxy_url())}
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}"}
 
 
 @router.get("/crm49/fetch-page")
