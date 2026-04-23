@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
@@ -9,6 +10,38 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+# Defensive: Claude sometimes echoes raw tool-call markup as text
+# (e.g. <invoke name="..."><parameter ...>...</parameter></invoke>) when
+# the model gets confused. Strip that out before sending to the user so
+# WhatsApp never sees XML.
+_TOOL_TAG_NAMES = ("invoke", "parameter", "function_calls", "tool_use")
+# Match a paired tag of one of the names above (with its content) — non-greedy
+# but anchored to the same tag name so nested tags don't cross-match.
+_TOOL_PAIRED_RES = [
+    re.compile(rf"<\s*{name}\b[^>]*>.*?<\s*/\s*{name}\s*>", re.DOTALL | re.IGNORECASE)
+    for name in _TOOL_TAG_NAMES
+]
+# Match orphan opening/closing/self-closing tags left after paired removal.
+_TOOL_ORPHAN_RE = re.compile(
+    rf"<\s*/?\s*(?:{'|'.join(_TOOL_TAG_NAMES)}|antml:[^>\s]+)\b[^>]*/?>",
+    re.IGNORECASE,
+)
+
+
+def _sanitize_text(text: str) -> str:
+    """Remove any raw tool-call markup the model may have leaked into text."""
+    cleaned = text
+    # Run paired removal a few times to handle nesting (parameter inside invoke).
+    for _ in range(3):
+        before = cleaned
+        for pattern in _TOOL_PAIRED_RES:
+            cleaned = pattern.sub("", cleaned)
+        if cleaned == before:
+            break
+    cleaned = _TOOL_ORPHAN_RE.sub("", cleaned)
+    return cleaned.strip()
 
 # Timezone for São Paulo
 BR_TZ = timezone(timedelta(hours=-3))
@@ -304,6 +337,7 @@ REGRAS DE CONVERSA:
 - IMPORTANTE: SEMPRE escreva uma resposta em texto pro cliente no final do turno, mesmo depois de chamar tools. Tool sem texto = cliente acha que você sumiu.
 
 REGRAS CRÍTICAS (não violar):
+- NUNCA escreva markup de chamada de tool no texto da resposta. Tools como `salvar_preferencias`, `buscar_imoveis`, `detalhes_imovel`, etc. são acionadas pelo MECANISMO de tool_use da API — você nunca digita "<invoke name=...>" ou "<parameter ...>" no corpo da mensagem. O cliente vê só texto natural.
 - Depois de chamar `detalhes_imovel`, SEMPRE comente o imóvel em texto (pelo menos: bairro, valor, 1 destaque). Não pode ficar mudo achando que a foto basta.
 - Condomínio ≠ bairro. Se o cliente cita um condomínio/empreendimento ("Condomínio Colinas", "Esplanada do Sol", "Wonder", "Life"), use o parâmetro `condominio` em `buscar_imoveis`, NUNCA o `bairro`. Ex: Colinas é condomínio dentro do bairro Jardim das Colinas.
 - Pra fotos / "me fala mais" / "esse aí" / qualquer menção a um imóvel já apresentado pelo nome ou código, chame `detalhes_imovel` com o código correto. Ela envia foto automaticamente. NUNCA diga "as fotos não estão disponíveis", "não tenho acesso às fotos", "não consigo enviar imagens" ou qualquer variação — mesmo se a tool não retornar URL de foto, apenas comente o imóvel naturalmente. O sistema cuida da entrega da imagem.
@@ -487,6 +521,16 @@ class AIAgent:
         for block in current_response.content:
             if hasattr(block, "text"):
                 final_text += block.text
+
+        # Strip any leaked tool-call markup before checking emptiness so
+        # we fall through to the property-aware fallback if Claude only
+        # emitted XML noise.
+        sanitized = _sanitize_text(final_text)
+        if sanitized != final_text:
+            logger.warning(
+                "Stripped leaked tool-call markup from Claude response"
+            )
+        final_text = sanitized
 
         # Meta rejects messages with empty `text.body` (error 100). If
         # Claude stopped after a tool call without saying anything (e.g.
