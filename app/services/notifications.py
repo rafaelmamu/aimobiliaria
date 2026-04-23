@@ -37,14 +37,23 @@ class NotificationService:
         period: str = "A combinar",
         notes: str = "",
         protocol: str = "",
+        broker_name: str = "",
+        broker_phone: str = "",
     ):
         """Notify broker about a scheduled visit."""
         now = datetime.now(BR_TZ).strftime("%d/%m/%Y %H:%M")
         message = (
             f"📅 *Visita Agendada!*\n\n"
+            f"🏠 *Imóvel:* {property_title} (Cód: {property_id})\n"
+        )
+        if broker_name:
+            broker_line = f"👨‍💼 *Corretor responsável:* {broker_name}"
+            if broker_phone:
+                broker_line += f" ({broker_phone})"
+            message += broker_line + "\n"
+        message += (
             f"👤 *Lead:* {lead_name or 'Não informado'}\n"
             f"📱 *WhatsApp:* {lead_phone}\n"
-            f"🏠 *Imóvel:* {property_title} (Cód: {property_id})\n"
             f"📆 *Data:* {date}\n"
             f"🕐 *Período:* {period}\n"
         )
@@ -90,14 +99,19 @@ class NotificationService:
         lead_phone: str,
         property_title: str,
         property_id: str,
+        broker_name: str = "",
     ):
         """Notify broker about a visit cancelled by client."""
         now = datetime.now(BR_TZ).strftime("%d/%m/%Y %H:%M")
         message = (
             f"❌ *Visita Cancelada pelo Cliente*\n\n"
+            f"🏠 *Imóvel:* {property_title} (Cód: {property_id})\n"
+        )
+        if broker_name:
+            message += f"👨‍💼 *Corretor responsável:* {broker_name}\n"
+        message += (
             f"👤 *Lead:* {lead_name or 'Não informado'}\n"
             f"📱 *WhatsApp:* {lead_phone}\n"
-            f"🏠 *Imóvel:* {property_title} (Cód: {property_id})\n"
             f"\n⏰ Cancelado em: {now}\n\n"
             f"O cliente desmarcou o agendamento."
         )

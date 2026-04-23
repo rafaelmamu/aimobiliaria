@@ -231,6 +231,7 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
                     db_session=db,
                     lead_id=lead_id,
                     tenant_id=tenant_id,
+                    property_client=property_client,
                 ),
                 "transferir_corretor": partial(
                     handle_transfer_broker, tenant_config=tenant.config or {}
@@ -294,9 +295,15 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
 
             # 12. Send broker notifications if needed
             broker_number = (tenant.config or {}).get("broker_notification_number")
+            tool_names = [t["name"] for t in ai_result.get("tool_calls", [])]
+            notifiable = {"agendar_visita", "cancelar_visita", "transferir_corretor"}
+            if not broker_number and notifiable.intersection(tool_names):
+                logger.warning(
+                    f"Tenant {tenant.slug!r} has no broker_notification_number "
+                    f"configured — skipping notification for tools {sorted(notifiable.intersection(tool_names))}"
+                )
             if broker_number:
                 notifier = NotificationService(whatsapp, broker_number)
-                tool_names = [t["name"] for t in ai_result.get("tool_calls", [])]
 
                 # Notify on visit scheduled
                 if "agendar_visita" in tool_names:
@@ -312,12 +319,15 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
                     await notifier.notify_visit_scheduled(
                         lead_name=sender_name or "Não informado",
                         lead_phone=from_number,
-                        property_title=visit_result.get("imovel_codigo", ""),
+                        property_title=visit_call["input"].get("titulo_imovel")
+                            or visit_result.get("imovel_codigo", ""),
                         property_id=visit_call["input"].get("imovel_id", ""),
                         date=visit_call["input"].get("data_preferencia", "A combinar"),
                         period=visit_call["input"].get("periodo", "A combinar"),
                         notes=visit_call["input"].get("observacoes", ""),
                         protocol=visit_result.get("protocolo", ""),
+                        broker_name=visit_result.get("broker_name", ""),
+                        broker_phone=visit_result.get("broker_phone", ""),
                     )
 
                     # Update broker_notified flag
@@ -348,6 +358,7 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
                             lead_phone=from_number,
                             property_title=cancel_result.get("titulo_imovel", ""),
                             property_id=cancel_result.get("imovel_codigo", ""),
+                            broker_name=cancel_result.get("broker_name", ""),
                         )
 
                         # Update broker_notified flag

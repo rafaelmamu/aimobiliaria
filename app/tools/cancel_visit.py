@@ -82,6 +82,7 @@ async def handle_cancel_visit(
         "imovel_codigo": appointment.property_id,
         "titulo_imovel": appointment.property_title or "",
         "status_anterior": old_status,
+        "broker_name": appointment.broker_name or "",
         "message": (
             f"Visita cancelada com sucesso! "
             f"O agendamento para o imóvel {appointment.property_title or appointment.property_id} "

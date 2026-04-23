@@ -735,13 +735,14 @@
                                     <tr>
                                         <th>Lead</th>
                                         <th>Imóvel</th>
+                                        <th>Corretor</th>
                                         <th>Data</th>
                                         <th>Status</th>
                                         <th>Criado em</th>
                                     </tr>
                                 </thead>
                                 <tbody id="appointments-table">
-                                    <tr><td colspan="5" class="loading"><div class="spinner"></div>Carregando...</td></tr>
+                                    <tr><td colspan="6" class="loading"><div class="spinner"></div>Carregando...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1148,7 +1149,7 @@
         function renderAppointmentsTable(appointments) {
             const tbody = document.getElementById('appointments-table');
             if (!appointments.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="icon">📅</div><p>Nenhum agendamento encontrado</p></td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="icon">📅</div><p>Nenhum agendamento encontrado</p></td></tr>';
                 return;
             }
 
@@ -1162,6 +1163,8 @@
                 };
                 const st = statusMap[apt.status] || statusMap['pending'];
                 const scheduledDate = apt.scheduled_date ? new Date(apt.scheduled_date).toLocaleDateString('pt-BR') : 'A combinar';
+                const scheduledTime = apt.scheduled_time ? ` ${apt.scheduled_time}` : '';
+                const broker = apt.broker_name || '—';
 
                 return `
                     <tr onclick="openAppointment('${apt.id}')">
@@ -1173,7 +1176,8 @@
                             <span class="lead-name">${apt.property_title || apt.property_id}</span>
                             <span class="lead-phone">Cód: ${apt.property_id}</span>
                         </td>
-                        <td>${scheduledDate}</td>
+                        <td>${broker}</td>
+                        <td>${scheduledDate}${scheduledTime}</td>
                         <td><span class="status-badge ${st.cls}">${st.label}</span></td>
                         <td class="time-ago">${apt.created_at ? timeAgo(apt.created_at) : '-'}</td>
                     </tr>
@@ -1205,10 +1209,14 @@
 
             // Property info
             const propInfo = document.getElementById('apt-property-info');
+            const dateVal = apt.scheduled_date ? new Date(apt.scheduled_date).toLocaleDateString('pt-BR') : 'A combinar';
+            const timeVal = apt.scheduled_time ? ` às ${apt.scheduled_time}` : '';
             propInfo.innerHTML = `
                 <div class="profile-item"><span class="key">Imóvel</span><span class="val">${apt.property_title || '-'}</span></div>
                 <div class="profile-item"><span class="key">Código</span><span class="val">${apt.property_id}</span></div>
-                <div class="profile-item"><span class="key">Data</span><span class="val">${apt.scheduled_date ? new Date(apt.scheduled_date).toLocaleDateString('pt-BR') : 'A combinar'}</span></div>
+                <div class="profile-item"><span class="key">Data</span><span class="val">${dateVal}${timeVal}</span></div>
+                ${apt.broker_name ? `<div class="profile-item"><span class="key">Corretor</span><span class="val">${apt.broker_name}</span></div>` : ''}
+                ${apt.broker_phone ? `<div class="profile-item"><span class="key">Telefone</span><span class="val">${apt.broker_phone}</span></div>` : ''}
             `;
 
             // Status info

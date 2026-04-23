@@ -65,6 +65,18 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("✅ Database tables synced")
+
+        # Idempotent column backfill for columns added after the initial
+        # create_all ran in prod. create_all never alters existing tables, so
+        # new nullable columns need an explicit ADD COLUMN IF NOT EXISTS.
+        column_additions = [
+            "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS broker_name VARCHAR(255)",
+            "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS broker_phone VARCHAR(50)",
+        ]
+        async with engine.begin() as conn:
+            for stmt in column_additions:
+                await conn.execute(text(stmt))
+        logger.info("✅ Column backfill complete")
     except Exception as e:
         logger.error(f"❌ PostgreSQL connection failed: {e}")
 
