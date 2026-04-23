@@ -36,3 +36,6 @@ logs/
 # Database
 *.db
 *.sqlite3
+
+# Local test fixtures (dump from prod /admin/crm49/peek)
+scripts/fixtures/
