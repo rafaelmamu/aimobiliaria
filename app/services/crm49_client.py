@@ -415,6 +415,13 @@ class CRM49Client:
 
         valores = raw.get("valores") or []
 
+        cor = raw.get("corretor") or {}
+        corretor = {
+            "nome": cor.get("nome") or "",
+            "telefones": cor.get("telefones") or [],
+            "emails": cor.get("emails") or [],
+        }
+
         base.update(
             {
                 "fotos": raw.get("fotos") or [],
@@ -429,6 +436,7 @@ class CRM49Client:
                 "condominio": _pick_valor_by_tipo(valores, "Condomínio"),
                 "iptu": _pick_valor_by_tipo(valores, "IPTU"),
                 "aceita_financiamento": None,
+                "corretor": corretor,
             }
         )
         return base

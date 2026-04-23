@@ -303,9 +303,12 @@ async def list_appointments(
             "property_id": apt.property_id,
             "property_title": apt.property_title,
             "scheduled_date": apt.scheduled_date.isoformat() if apt.scheduled_date else None,
+            "scheduled_time": apt.scheduled_time.strftime("%H:%M") if apt.scheduled_time else None,
             "status": apt.status,
             "notes": apt.notes,
             "broker_notified": apt.broker_notified,
+            "broker_name": apt.broker_name,
+            "broker_phone": apt.broker_phone,
             "created_at": apt.created_at.isoformat() if apt.created_at else None,
             "updated_at": apt.updated_at.isoformat() if apt.updated_at else None,
         }

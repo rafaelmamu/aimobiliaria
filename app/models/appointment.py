@@ -28,6 +28,8 @@ class Appointment(Base):
     status: Mapped[str] = mapped_column(String(50), default="pending")
     notes: Mapped[str | None] = mapped_column(Text)
     broker_notified: Mapped[bool] = mapped_column(Boolean, default=False)
+    broker_name: Mapped[str | None] = mapped_column(String(255))
+    broker_phone: Mapped[str | None] = mapped_column(String(50))
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
