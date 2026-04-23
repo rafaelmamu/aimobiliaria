@@ -452,41 +452,59 @@ class AIAgent:
                                 {"name": tool_name, "result": result}
                             )
 
-                            # Collect images from property details.
-                            # Prefer the first real-size photo from `fotos` (only
-                            # the /properties/{id} endpoint returns these). Fall
-                            # back to the listing's miniature `foto_principal`.
+                            # Collect property photos. Send up to MAX_PHOTOS
+                            # deduplicated images from `fotos` (the
+                            # /properties/{id} endpoint returns the gallery);
+                            # fall back to the listing miniature only when
+                            # `fotos` is empty.
                             if tool_name == "detalhes_imovel" and isinstance(result, dict):
+                                MAX_PHOTOS = 5
                                 fotos = result.get("fotos") or []
-                                foto = ""
+                                titulo = result.get("titulo", "Imóvel")
+                                codigo = result.get("codigo", "")
+                                already = {img["url"] for img in images_to_send}
+                                queued = 0
                                 for candidate in fotos:
-                                    if (
-                                        isinstance(candidate, str)
-                                        and candidate.startswith("http")
-                                        and "placeholder" not in candidate
-                                    ):
-                                        foto = candidate
+                                    if queued >= MAX_PHOTOS:
                                         break
-                                if not foto:
+                                    if not isinstance(candidate, str):
+                                        continue
+                                    if not candidate.startswith("http"):
+                                        continue
+                                    if "placeholder" in candidate:
+                                        continue
+                                    if candidate in already:
+                                        continue
+                                    images_to_send.append({
+                                        "url": candidate,
+                                        "caption": (
+                                            f"{titulo} - Cód: {codigo}" if queued == 0 else ""
+                                        ),
+                                    })
+                                    already.add(candidate)
+                                    queued += 1
+
+                                if queued == 0:
                                     fp = result.get("foto_principal") or ""
                                     if (
                                         isinstance(fp, str)
                                         and fp.startswith("http")
                                         and "placeholder" not in fp
+                                        and fp not in already
                                     ):
-                                        foto = fp
-                                if foto:
+                                        images_to_send.append({
+                                            "url": fp,
+                                            "caption": f"{titulo} - Cód: {codigo}",
+                                        })
+                                        queued = 1
+
+                                if queued:
                                     logger.info(
-                                        f"Queuing property image for {result.get('codigo', '?')}: {foto}"
+                                        f"Queued {queued} photo(s) for property {codigo}"
                                     )
-                                    images_to_send.append({
-                                        "url": foto,
-                                        "caption": f"{result.get('titulo', 'Imóvel')} - Cód: {result.get('codigo', '')}",
-                                    })
                                 else:
                                     logger.warning(
-                                        f"detalhes_imovel for {result.get('codigo', '?')} "
-                                        "returned no usable photo URL"
+                                        f"detalhes_imovel for {codigo} returned no usable photo URL"
                                     )
 
                         except Exception as e:
