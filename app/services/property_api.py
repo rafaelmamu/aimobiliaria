@@ -1,4 +1,7 @@
+import json
 import logging
+import os
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -135,8 +138,48 @@ class PropertyAPIClient:
 # ─────────────────────────────────────────────
 
 
+_FIXTURE_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "scripts"
+    / "fixtures"
+    / "upside_properties.json"
+)
+
+
+def _load_fixture() -> list[dict] | None:
+    """Load real-property fixture if present. Returns normalized list or None."""
+    if not _FIXTURE_PATH.exists():
+        return None
+    try:
+        raw = json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning(f"Failed to load fixture {_FIXTURE_PATH}: {e}")
+        return None
+
+    # /admin/crm49/peek shape: {"tenants": [{"slug":..., "items":[...]}], ...}
+    # or it might be a flat list — handle both.
+    items: list[dict] = []
+    if isinstance(raw, dict):
+        for tenant in raw.get("tenants", []):
+            items.extend(
+                tenant.get("sample", [])
+                or tenant.get("items", [])
+                or tenant.get("properties", [])
+                or []
+            )
+        if not items:
+            items = raw.get("items", []) or raw.get("results", []) or raw.get("sample", []) or []
+    elif isinstance(raw, list):
+        items = raw
+    return items or None
+
+
 class MockPropertyAPIClient(PropertyAPIClient):
-    """Mock client with static data for testing before real API is available."""
+    """Mock client with static data for testing before real API is available.
+
+    If `scripts/fixtures/upside_properties.json` exists, loads from it;
+    otherwise falls back to the small hardcoded MOCK_PROPERTIES list.
+    """
 
     MOCK_PROPERTIES = [
         {
@@ -241,6 +284,23 @@ class MockPropertyAPIClient(PropertyAPIClient):
         },
     ]
 
+    def __init__(self, base_url: str = "http://mock", api_key: str | None = None, config: dict = None):
+        super().__init__(base_url=base_url, api_key=api_key, config=config)
+        fixture = _load_fixture()
+        if fixture:
+            normalized: list[dict] = []
+            for raw in fixture:
+                base = self._normalize_property(raw)
+                # carry extras useful for details/search
+                base["descricao"] = raw.get("descricao", "")
+                base["fotos"] = raw.get("fotos", raw.get("galeria", []))
+                base["caracteristicas"] = raw.get("caracteristicas", [])
+                base["lazer"] = raw.get("lazer", [])
+                base["aceita_financiamento"] = raw.get("aceita_financiamento")
+                normalized.append(base)
+            self.MOCK_PROPERTIES = normalized
+            logger.info(f"MockPropertyAPIClient loaded {len(normalized)} properties from fixture")
+
     async def search_properties(self, filters: dict) -> list[dict]:
         """Filter mock properties based on criteria."""
         results = []
@@ -248,15 +308,15 @@ class MockPropertyAPIClient(PropertyAPIClient):
             match = True
 
             if "transacao" in filters and filters["transacao"]:
-                if prop["transacao"] != filters["transacao"]:
+                if prop.get("transacao") != filters["transacao"]:
                     match = False
 
             if "tipo_imovel" in filters and filters["tipo_imovel"]:
-                if prop["tipo"] != filters["tipo_imovel"]:
+                if prop.get("tipo") != filters["tipo_imovel"]:
                     match = False
 
             if "cidade" in filters and filters["cidade"]:
-                if filters["cidade"].lower() not in prop["cidade"].lower():
+                if filters["cidade"].lower() not in (prop.get("cidade") or "").lower():
                     match = False
 
             if "bairro" in filters and filters["bairro"]:
@@ -278,25 +338,25 @@ class MockPropertyAPIClient(PropertyAPIClient):
                     match = False
 
             if "quartos_min" in filters and filters["quartos_min"]:
-                if prop["quartos"] < filters["quartos_min"]:
+                if (prop.get("quartos") or 0) < filters["quartos_min"]:
                     match = False
 
             if "preco_max" in filters and filters["preco_max"]:
-                if prop["preco"] > filters["preco_max"]:
+                if (prop.get("preco") or 0) > filters["preco_max"]:
                     match = False
 
             if "preco_min" in filters and filters["preco_min"]:
-                if prop["preco"] < filters["preco_min"]:
+                if (prop.get("preco") or 0) < filters["preco_min"]:
                     match = False
 
             if match:
                 results.append(prop)
 
-        return results
+        return results[:10]
 
     async def get_property_details(self, property_id: str) -> dict | None:
         """Get mock property details."""
         for prop in self.MOCK_PROPERTIES:
-            if prop["id"] == property_id:
+            if str(prop.get("id")) == str(property_id):
                 return prop
         return None

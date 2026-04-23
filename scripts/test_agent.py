@@ -20,7 +20,18 @@ from app.tools.search_properties import handle_search_properties
 from app.tools.get_property_details import handle_get_property_details
 from app.tools.schedule_visit import handle_schedule_visit
 from app.tools.transfer_broker import handle_transfer_broker
+from app.tools.save_preferences import handle_save_preferences
 from functools import partial
+
+
+async def _stub_cancel_visit(params: dict) -> dict:
+    """Local stub: real handler needs DB session, which we don't have here."""
+    imovel = params.get("imovel_id") or params.get("protocolo") or "—"
+    return {
+        "success": True,
+        "imovel_codigo": imovel,
+        "message": f"[stub local] Visita {imovel} cancelada.",
+    }
 
 
 async def main():
@@ -54,6 +65,8 @@ async def main():
         ),
         "agendar_visita": handle_schedule_visit,
         "transferir_corretor": handle_transfer_broker,
+        "salvar_preferencias": handle_save_preferences,
+        "cancelar_visita": _stub_cancel_visit,
     }
 
     conversation_history = []
