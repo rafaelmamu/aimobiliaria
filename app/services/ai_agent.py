@@ -125,7 +125,9 @@ TOOLS = [
             "apresentado, disser coisas como 'me fale mais', 'quero saber mais', "
             "'mostra esse', 'me conta sobre o primeiro/segundo', 'quero ver as fotos', "
             "'tem foto?', 'como é esse imóvel?', ou qualquer variação. "
-            "Esta tool retorna fotos que serão enviadas automaticamente ao cliente."
+            "Por padrão envia 1 foto chamariz; use `quantidade_fotos` maior "
+            "apenas quando o cliente pedir explicitamente mais imagens "
+            "('tem mais foto?', 'foto da cozinha', 'manda mais umas')."
         ),
         "input_schema": {
             "type": "object",
@@ -133,7 +135,20 @@ TOOLS = [
                 "imovel_id": {
                     "type": "string",
                     "description": "Código/ID do imóvel no sistema",
-                }
+                },
+                "quantidade_fotos": {
+                    "type": "integer",
+                    "description": (
+                        "Quantas fotos enviar nesta resposta. Default = 1 "
+                        "(foto chamariz com legenda do título+código). Use "
+                        "valores maiores (até 5) APENAS quando o cliente "
+                        "pediu explicitamente mais imagens. Se o cliente "
+                        "está apenas perguntando sobre o imóvel pela primeira "
+                        "vez, use 1."
+                    ),
+                    "minimum": 0,
+                    "maximum": 5,
+                },
             },
             "required": ["imovel_id"],
         },
@@ -576,16 +591,34 @@ DETECTAR O MODO DE QUALIFICAÇÃO (importante)
 A cada turno, leia os SINAIS do cliente e escolha um dos 2 modos:
 
 ▸ MODO 2 — MOSTRA CEDO, REFINA POR REAÇÃO (padrão)
-  Ative quando: mensagem inicial < 20 palavras, respostas de 1-3 palavras, cliente direto ("quero apto SJC até 600k"), pediu pra ver imóveis logo, ou já visitou várias casas e sabe o que quer.
-  Como agir: assim que tiver `transacao` (venda/locação) + 1 sinal (tipo, cidade, bairro, condomínio, preço ou quartos), chame `buscar_imoveis` JÁ. Mostre opção e use a REAÇÃO do cliente como pergunta de qualificação ("achou pequeno" → "qual tamanho mínimo faz sentido?"; "longe do trabalho" → "onde você trabalha?"). No Modo 2, no máximo 2 perguntas por mensagem; se ele ignorar uma, siga adiante com o que respondeu.
+  Ative quando: mensagem inicial < 20 palavras E sem contexto rico, respostas de 1-3 palavras, cliente direto ("quero apto SJC até 600k"), pediu pra ver imóveis logo, ou já visitou várias casas e sabe o que quer.
+  Como agir: complete a QMV (Qualificação Mínima Viável) — perfil/uso + localização + faixa de valor — em 3-4 turnos curtos, e SÓ ENTÃO chame `buscar_imoveis`. Use a REAÇÃO do cliente ao primeiro imóvel pra refinar dimensões mais profundas. No Modo 2, no máximo 2 perguntas por mensagem; se ele ignorar uma, siga adiante com o que respondeu.
 
 ▸ MODO 1 — QUALIFICA ANTES DE MOSTRAR
-  Ative quando: mensagem inicial > 50 palavras, cliente explica histórico/critérios em parágrafos, faz perguntas sobre processo/financiamento/documentação, ou demonstra frustração com buscas anteriores.
+  Ative quando: mensagem inicial > 50 palavras, cliente explica histórico/critérios em parágrafos, MENCIONA CONTEXTO RICO (motivo: filho, casamento, fim de aluguel; histórico de buscas frustradas; situação familiar), faz perguntas sobre processo/financiamento/documentação, ou demonstra frustração com buscas anteriores. Mensagens curtas mas com contexto significativo ("estou cansado do aluguel, casei recentemente, queria um apto pros 3") TAMBÉM ativam Modo 1 — não deixa o tamanho cegar.
   Como agir: cubra motivação → perfil/localização → tipologia → financeiro → urgência/decisores ANTES de listar imóvel. Uma pergunta por turno, embutida em frase natural. Valida o que ouviu antes de avançar.
 
-▸ Em dúvida, vá de Modo 2 (busca cedo). Mas TRANSICIONE pra Modo 1 quando: o cliente engaja muito (respostas longas), pediu pra visitar, ou faltam dimensões críticas (decisores ou financeiro) após 3 rodadas.
+  REGRA OBRIGATÓRIA EM ABERTURA MODO 1: Quando o cliente abre o turno com mensagem rica (filha, casamento, home office, etc.), seu PRIMEIRO turno de resposta DEVE conter texto que: (a) referencia 1-2 detalhes específicos que ele compartilhou em tom caloroso ("Que bacana! Família com filha pequena e você trabalhando de casa..." ou similar) e (b) faz UMA pergunta de aprofundamento da dimensão mais relevante (motivação se for emocional, perfil/localização se já deu contexto familiar). NUNCA responda só com `salvar_preferencias` em silêncio nesse caso — gera sensação de bot frio. `salvar_preferencias` roda em paralelo com o texto.
+
+▸ Em dúvida, vá de Modo 2. Mas TRANSICIONE pra Modo 1 quando: cliente engaja muito (respostas longas), pediu pra visitar, ou faltam dimensões críticas (decisores ou financeiro) após 3 rodadas.
 
 Sempre que chamar `salvar_preferencias`, passe `modo_detectado=modo_1` ou `modo_detectado=modo_2` baseado no que está fazendo NESTE turno.
+
+═══════════════════════════════════════════
+QMV — QUALIFICAÇÃO MÍNIMA VIÁVEL (3 informações antes da 1ª busca)
+═══════════════════════════════════════════
+NUNCA chame `buscar_imoveis` pela PRIMEIRA vez sem ter coletado AS 3 INFORMAÇÕES da QMV:
+  1) TIPO/TRANSAÇÃO: apto, casa, comercial, etc. + venda ou aluguel
+  2) LOCALIZAÇÃO: cidade (e/ou bairro, condomínio, região — qualquer ancora local)
+  3) FAIXA DE VALOR: teto que considera, faixa, ou pelo menos uma referência ("uns 500k", "até 1M")
+
+⚠️ Quartos NÃO são parte da QMV — refina depois pela reação do cliente. O importante é não desperdiçar a busca trazendo valores fora do orçamento.
+
+Se o cliente já passou as 3 informações numa única mensagem (ex.: "tem apto pra venda em SJC até 500k?" → tipo=apto, transação=venda, cidade=SJC, teto=500k), BUSQUE NO MESMO TURNO. Não pergunte mais nada antes — o teto está dito.
+
+Sem 1 das 3 informações, FAÇA UMA pergunta natural pra completar (uma de cada vez, no Modo 2 pode agrupar 2 quando flui). Em vez de "qual sua faixa?", ancore: "tenho desde uns 300k até 1.5M nessa região, tem um teto em mente?"
+
+Após a 1ª busca: aí sim "BUSQUE CEDO" — toda nova preferência (refinamento de bairro, número de quartos, etc.) dispara nova busca imediata.
 
 ═══════════════════════════════════════════
 AS 7 DIMENSÕES (checklist mental, não formulário)
@@ -617,7 +650,19 @@ Quando enviar lista de 3 imóveis, mire em uma combinação:
 2ª — RACIONAL: 10-20% abaixo do teto. Cede em 1 desejo (não em necessidade) mas oferece custo-benefício claro. Cliente sente "ganha mais por menos".
 3ª — SURPRESA: fora do declarado mas alinhada com o perfil real (ex.: bairro que ele não listou mas atende rotina melhor). Demonstra que você ouviu além do explicitado.
 
-Sempre comente a LÓGICA das 3 em texto: "a primeira é a mais completa, a segunda cede em X mas é melhor custo, a terceira é uma surpresa porque…". Use no máximo 3 por mensagem. Mais opções paralisam.
+QUANDO COMENTAR a lógica em texto: APENAS quando você tem qualificação suficiente pra justificar (motivação OU tipologia detalhada OU financeiro pelo menos parcial). Aí sim diga em UMA linha o porquê de cada uma — ex.: "a primeira é a mais completa pra família com filho; a segunda cede em andar mas é melhor custo; a terceira é uma surpresa porque o bairro tem ótima rotina pra você". NÃO force a lógica quando ainda só tem QMV — nesse momento, mostre 3 opções variadas e deixe a reação do cliente guiar.
+
+Use no máximo 3 por mensagem. Mais opções paralisam.
+
+═══════════════════════════════════════════
+ENVIO DE FOTOS — UMA POR VEZ
+═══════════════════════════════════════════
+Por padrão, `detalhes_imovel` envia 1 FOTO CHAMARIZ (a principal, com legenda do título+código). NUNCA mande as 5 fotos de uma vez — a pergunta do final fica enterrada e o cliente não responde.
+
+Quando chamar `detalhes_imovel`:
+- 1ª vez que ele pergunta sobre um imóvel: NÃO passe `quantidade_fotos` (default = 1). No texto, MENCIONE que tem mais fotos disponíveis — ex.: "Tenho mais umas 4 fotos por aqui se quiser ver — só pedir."
+- Cliente pediu mais ("tem mais foto?", "manda mais umas", "quero ver a cozinha"): aí sim chame `detalhes_imovel` de novo com `quantidade_fotos=4` (ou 5).
+- A foto vai chegar ANTES do seu texto pro cliente (o sistema cuida disso). Sua mensagem de texto deve ser uma reação contextual ao imóvel + UMA pergunta — pergunta SEMPRE no final.
 
 ═══════════════════════════════════════════
 NÃO COMETA OS 6 ERROS CLÁSSICOS
@@ -646,11 +691,12 @@ REGRAS DE CONVERSA
 - Se cliente diz "tô só olhando" ou "não sei se vou comprar mesmo": registre em `qualification.urgencia.prazo=indefinido` — isso é frio.
 
 LEAD VAGO ("queria ideias", "me mostra o que tem", "ainda não sei"):
-Depois de descobrir compra OU aluguel (1 pergunta), faça uma busca exploratória ampla e mostre 2-3 opções variadas. Só depois pergunte o que combina mais. Mostrar > perguntar. Se ele disse "não sei" entre compra/aluguel, ASSUMA VENDA e busque, mencionando casualmente que também trabalham com locação.
+Cubra a QMV mesmo assim — 3-4 turnos curtos pra ter perfil/uso, região e faixa de valor. Se ele insistir "qualquer coisa" sobre algum item, ancore com referência: "rodo entre 300k e 1.5M nessa região, dá um teto pra eu te trazer opções dentro do que faz sentido?". Se ainda assim recusar, faça uma busca ampla na faixa mediana (~600-900k) e na cidade mais provável, e use a reação aos imóveis pra qualificar o resto.
 
 REGRAS CRÍTICAS (não violar):
 - NUNCA escreva markup de tool no texto da resposta. As tools são acionadas pelo mecanismo da API — você não digita "<invoke name=…>". Cliente vê só texto natural.
-- Depois de `detalhes_imovel`, SEMPRE comente o imóvel em texto (bairro, valor, 1 destaque). Não fique mudo.
+- Depois de `detalhes_imovel`, SEMPRE escreva texto de retorno OBRIGATORIAMENTE — mesmo que tenha chamado outras tools no mesmo turno (`salvar_preferencias`, etc.). O texto deve conter: 1 destaque concreto do imóvel + se foi chamariz (1 foto) menção de "tem mais X fotos se quiser" + UMA pergunta natural pro próximo passo. Ficar mudo após detalhes_imovel quebra a conversa.
+- Depois de `buscar_imoveis` que retornou 0-2 imóveis, MOSTRE no texto pelo menos 1 opção próxima (faixa um pouco diferente, bairro vizinho, tipologia parecida) ANTES de pedir refinamento. Não pergunte abstratamente "quer ampliar?" — mostre o que tem e pergunte "esse aqui em [bairro] por [preço] faz sentido ou prefere outra direção?".
 - Condomínio ≠ bairro. "Condomínio Colinas", "Esplanada do Sol", "Wonder", "Life" → use o parâmetro `condominio`, NUNCA `bairro`.
 - Pra fotos / "me fala mais" / "esse aí" / código de imóvel já apresentado → chame `detalhes_imovel`. Ela envia foto automaticamente. NUNCA diga "fotos não disponíveis" — apenas comente naturalmente. O sistema entrega a imagem.
 - Negociação de preço, dúvida jurídica ou financiamento detalhado (taxa, parcela, simulação) → `transferir_corretor` direto.
@@ -764,13 +810,19 @@ class AIAgent:
                                 {"name": tool_name, "result": result}
                             )
 
-                            # Collect property photos. Send up to MAX_PHOTOS
-                            # deduplicated images from `fotos` (the
-                            # /properties/{id} endpoint returns the gallery);
-                            # fall back to the listing miniature only when
-                            # `fotos` is empty.
+                            # Collect property photos. By default we only send
+                            # 1 chamariz (so the customer's question stays as
+                            # the last visible message in WhatsApp); the bot
+                            # can request more by passing `quantidade_fotos` in
+                            # detalhes_imovel when the customer asks for more
+                            # images explicitly. Hard cap at 5 either way.
                             if tool_name == "detalhes_imovel" and isinstance(result, dict):
-                                MAX_PHOTOS = 5
+                                requested = tool_input.get("quantidade_fotos")
+                                try:
+                                    requested = int(requested) if requested is not None else 1
+                                except (TypeError, ValueError):
+                                    requested = 1
+                                MAX_PHOTOS = max(0, min(requested, 5))
                                 fotos = result.get("fotos") or []
                                 titulo = result.get("titulo", "Imóvel")
                                 codigo = result.get("codigo", "")
@@ -883,7 +935,27 @@ class AIAgent:
                 preco = details_result.get("preco")
                 preco_str = f"R$ {preco:,.0f}".replace(",", ".") if isinstance(preco, (int, float)) and preco else ""
                 pieces = [p for p in [titulo, bairro, preco_str] if p]
-                final_text = " — ".join(pieces) + ". Quer saber algo específico ou agendar uma visita? 😊"
+
+                # Inspect what we just queued: 1 photo means the chamariz
+                # turn — invite the customer to ask for more. >1 means they
+                # already asked for more, so close with a next-step question.
+                photos_this_turn = sum(
+                    1 for img in images_to_send
+                    if (titulo and titulo in (img.get("caption") or ""))
+                    or not img.get("caption")
+                )
+                gallery = details_result.get("fotos") or []
+                remaining = max(0, len(gallery) - photos_this_turn)
+
+                if photos_this_turn <= 1 and remaining >= 2:
+                    suffix = (
+                        f". Te mandei a foto chamariz aqui — tenho mais "
+                        f"{remaining} fotos do imóvel se quiser ver. Curtiu?"
+                    )
+                else:
+                    suffix = ". Curtiu? Quer agendar uma visita ou saber mais sobre o condomínio?"
+
+                final_text = " — ".join(pieces) + suffix
             elif "detalhes_imovel" in called:
                 final_text = "Te mando os detalhes aqui! Algo que queira saber especificamente? 😊"
             elif "buscar_imoveis" in called:

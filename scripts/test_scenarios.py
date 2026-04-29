@@ -85,6 +85,47 @@ SCENARIOS = {
             "me fala mais sobre o primeiro",
         ],
     },
+    # ─── Cenários novos: QMV + Modo 1/2 + foto progressiva ───
+    "I": {
+        "title": "Modo 1 longo — abertura rica deve adiar busca",
+        "turns": [
+            (
+                "Boa tarde! Estamos pensando em sair do aluguel. Eu e minha "
+                "esposa moramos hoje no Jardim Aquarius, temos uma filha de 5 "
+                "anos. Trabalho de casa três dias por semana, ela trabalha no "
+                "centro. Queríamos um apto de 3 quartos, em condomínio com "
+                "lazer pra criança. Ainda estamos pesquisando bairros e "
+                "tipologia, valor a gente vê depois."
+            ),
+            "podemos olhar opções entre 700 e 900",
+            "preciso falar com minha esposa sobre bairro, ela quer ficar perto da escola",
+        ],
+    },
+    "J": {
+        "title": "QMV — bot deve pedir teto antes de buscar",
+        "turns": [
+            "oi",
+            "tô procurando pra comprar",
+            "apartamento, 3 quartos",
+            "São José dos Campos",
+        ],
+    },
+    "K": {
+        "title": "Foto progressiva — 1 chamariz, mais fotos sob pedido",
+        "turns": [
+            "quero apto pra venda em SJC, 3 quartos, até 700k",
+            "manda foto do primeiro",
+            "tem mais foto?",
+        ],
+    },
+    "L": {
+        "title": "Modo 1 curto rico — contexto disparando Modo 1",
+        "turns": [
+            "oi",
+            "casei recentemente, queria sair do aluguel e comprar nosso primeiro apto",
+            "ainda não pensamos no orçamento, queria entender as opções",
+        ],
+    },
 }
 
 
@@ -107,6 +148,8 @@ async def run_scenario(letter: str, scenario: dict, agent: AIAgent, tool_handler
         "first_search_turn": None,
         "tools_called": [],
         "turns": 0,
+        "photos_per_turn": [],
+        "modo_observed": [],
     }
     searched = False
 
@@ -128,33 +171,67 @@ async def run_scenario(letter: str, scenario: dict, agent: AIAgent, tool_handler
             if tc["name"] == "buscar_imoveis" and not searched:
                 searched = True
                 metrics["first_search_turn"] = turn_idx
+            if tc["name"] == "salvar_preferencias":
+                modo = tc["input"].get("modo_detectado")
+                if modo:
+                    metrics["modo_observed"].append(modo)
 
         if not searched:
             metrics["questions_before_first_search"] += _count_questions(response)
 
+        n_photos = len(result["images_to_send"])
+        metrics["photos_per_turn"].append(n_photos)
+
         if result["tool_calls"]:
             print(f"   🔧 {', '.join(t['name'] for t in result['tool_calls'])}")
         print(f"🤖 {response}")
-        if result["images_to_send"]:
-            print(f"   📸 imagens: {len(result['images_to_send'])}")
+        if n_photos:
+            print(f"   📸 imagens enfileiradas: {n_photos}")
 
     metrics["turns"] = len(scenario["turns"])
-    print(f"\n📊 Métricas: perguntas até 1ª busca = {metrics['questions_before_first_search']}, "
-          f"1ª busca no turno = {metrics['first_search_turn']}, "
-          f"tools = {metrics['tools_called']}")
+    print(
+        f"\n📊 Métricas: perguntas até 1ª busca = {metrics['questions_before_first_search']}, "
+        f"1ª busca no turno = {metrics['first_search_turn']}, "
+        f"fotos/turno = {metrics['photos_per_turn']}, "
+        f"modo observado = {metrics['modo_observed']}, "
+        f"tools = {metrics['tools_called']}"
+    )
     return metrics
 
 
 async def main():
+    sys.stdout.reconfigure(encoding="utf-8")  # for Windows cp1252 consoles
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("❌ ANTHROPIC_API_KEY não setada")
+        print("[fail] ANTHROPIC_API_KEY nao setada")
         return
 
     only = sys.argv[1].upper() if len(sys.argv) > 1 else None
 
     agent = AIAgent()
     property_client = MockPropertyAPIClient(base_url="http://mock")
-    print(f"📂 catálogo carregado: {len(property_client.MOCK_PROPERTIES)} imóveis\n")
+
+    # The fixture (scripts/fixtures/upside_properties.json) is a /peek dump
+    # that lacks `quartos`, `area_privativa`, `descricao` and `fotos`. Prepend
+    # the original inline mocks (which have full fields) so test scenarios
+    # like "3 quartos até 700k" actually return results and we can verify
+    # photo pacing with multiple gallery URLs.
+    SYNTHETIC = [
+        "https://images.example.com/foto2.jpg",
+        "https://images.example.com/foto3.jpg",
+        "https://images.example.com/foto4.jpg",
+        "https://images.example.com/foto5.jpg",
+    ]
+    inline = [dict(p) for p in MockPropertyAPIClient.MOCK_PROPERTIES]
+    for prop in inline:
+        if not prop.get("fotos"):
+            principal = prop.get("foto_principal") or ""
+            prop["fotos"] = ([principal] if principal else []) + SYNTHETIC
+
+    property_client.MOCK_PROPERTIES = inline + list(property_client.MOCK_PROPERTIES)
+    print(
+        f"📂 catálogo: {len(inline)} inline (com fotos+quartos) + "
+        f"{len(property_client.MOCK_PROPERTIES) - len(inline)} fixture\n"
+    )
 
     tool_handlers = {
         "buscar_imoveis": partial(handle_search_properties, property_client=property_client),
@@ -176,9 +253,13 @@ async def main():
     print("RESUMO")
     print("=" * 70)
     for letter, m in results.items():
-        print(f"  {letter}: 1ª busca @ turno {m['first_search_turn']}, "
-              f"{m['questions_before_first_search']} perguntas antes, "
-              f"tools={m['tools_called']}")
+        print(
+            f"  {letter}: 1ª busca @ turno {m['first_search_turn']}, "
+            f"{m['questions_before_first_search']} perguntas antes, "
+            f"fotos/turno={m['photos_per_turn']}, "
+            f"modo={m['modo_observed']}, "
+            f"tools={m['tools_called']}"
+        )
 
 
 if __name__ == "__main__":

@@ -258,10 +258,10 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
 
             response_text = ai_result["response"]
 
-            # 8. Send response via WhatsApp (text first)
-            await whatsapp.send_text_message(to=from_number, text=response_text)
-
-            # 9. Send property images if any
+            # 8. Send property images FIRST so the text + question lands as
+            # the last message in WhatsApp — otherwise the question gets
+            # buried above the photos and the customer is less likely to
+            # respond to it.
             for image in ai_result.get("images_to_send", []):
                 try:
                     await whatsapp.send_image_message(
@@ -272,6 +272,9 @@ async def process_incoming_message(tenant: Tenant, message_data: dict):
                     logger.info(f"Image sent to {from_number}: {image['url']}")
                 except Exception as e:
                     logger.error(f"Failed to send image: {e}")
+
+            # 9. Then the text response with the closing question.
+            await whatsapp.send_text_message(to=from_number, text=response_text)
 
             # 10. Save outbound message
             await lead_mgr.save_message(
