@@ -317,6 +317,107 @@
         .status-lost { background: #3b1a1a; color: #f87171; }
         .status-cancelled-client { background: #3b2a0a; color: #fb923c; }
 
+        /* ─── Temperature badges (Upside qualification) ─── */
+        .temp-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        .temp-hot { background: #3a1408; color: #fb923c; border: 1px solid #c2410c; }
+        .temp-warm { background: #3a2a08; color: #fbbf24; border: 1px solid #a16207; }
+        .temp-cold { background: #082a3a; color: #60a5fa; border: 1px solid #1d4ed8; }
+        .temp-unknown { background: var(--bg-card-hover); color: var(--text-muted); border: 1px solid var(--border); }
+
+        .stage-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            background: var(--bg-card-hover);
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ─── 7 Dimensions accordion ─── */
+        .dim-section {
+            border-top: 1px solid var(--border);
+            padding: 10px 0;
+        }
+        .dim-section:first-child { border-top: none; }
+        .dim-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            padding: 4px 0;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .dim-header .icon-status { font-size: 11px; }
+        .dim-header .arrow {
+            font-size: 10px;
+            color: var(--text-muted);
+            transition: transform 0.15s;
+        }
+        .dim-section.open .arrow { transform: rotate(90deg); }
+        .dim-body {
+            display: none;
+            padding: 8px 0 4px 4px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .dim-section.open .dim-body { display: block; }
+        .dim-body .row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            gap: 12px;
+        }
+        .dim-body .row .k { color: var(--text-muted); }
+        .dim-body .row .v {
+            font-weight: 500;
+            text-align: right;
+            color: var(--text-primary);
+            font-size: 12px;
+            max-width: 180px;
+            word-break: break-word;
+        }
+        .dim-status-complete { color: #4ade80; }
+        .dim-status-partial { color: #fbbf24; }
+        .dim-status-missing { color: var(--text-muted); }
+
+        .qual-summary {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 12px 14px;
+            margin-bottom: 14px;
+        }
+        .qual-summary .temp-line {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .qual-summary .temp-reason {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+            font-style: italic;
+        }
+        .qual-summary .stage-line {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+
         .time-ago {
             font-size: 12px;
             color: var(--text-muted);
@@ -585,6 +686,46 @@
                     </div>
                 </div>
 
+                <!-- Qualification KPIs -->
+                <div class="page-header" style="margin-top:12px;margin-bottom:12px">
+                    <h2 style="font-size:18px">Qualificação</h2>
+                    <p>Termômetro do lead e cobertura das 7 dimensões</p>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card" style="border-color:#c2410c">
+                        <div class="label">🔥 Quentes</div>
+                        <div class="value" id="kpi-hot" style="color:#fb923c">-</div>
+                        <div class="sub">prazo + crédito + visita ≤3d</div>
+                    </div>
+                    <div class="stat-card" style="border-color:#a16207">
+                        <div class="label">🌡️ Mornos</div>
+                        <div class="value" id="kpi-warm" style="color:#fbbf24">-</div>
+                        <div class="sub">comparando, sem urgência</div>
+                    </div>
+                    <div class="stat-card" style="border-color:#1d4ed8">
+                        <div class="label">🧊 Frios</div>
+                        <div class="value" id="kpi-cold" style="color:#60a5fa">-</div>
+                        <div class="sub">só olhando ou bloqueado</div>
+                    </div>
+                    <div class="stat-card" style="border-color:#3b1a1a">
+                        <div class="label">⚠️ Quentes sem visita</div>
+                        <div class="value" id="kpi-hot-no-apt" style="color:#f87171">-</div>
+                        <div class="sub">ação urgente</div>
+                    </div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="label">Dimensões médias</div>
+                        <div class="value" id="kpi-avg-dim">-</div>
+                        <div class="sub" id="kpi-avg-dim-sub">de 7 cobertas</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Sem follow-up 7+ dias</div>
+                        <div class="value" id="kpi-no-followup">-</div>
+                        <div class="sub">leads ativos parados</div>
+                    </div>
+                </div>
+
                 <!-- Recent Leads -->
                 <div class="section-card">
                     <div class="section-header">
@@ -597,12 +738,13 @@
                                 <tr>
                                     <th>Lead</th>
                                     <th>Status</th>
+                                    <th>Temp.</th>
                                     <th>Interesse</th>
                                     <th>Última Mensagem</th>
                                 </tr>
                             </thead>
                             <tbody id="recent-leads-table">
-                                <tr><td colspan="4" class="loading"><div class="spinner"></div>Carregando...</td></tr>
+                                <tr><td colspan="5" class="loading"><div class="spinner"></div>Carregando...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -617,13 +759,43 @@
                 </div>
 
                 <div class="section-card">
-                    <div class="section-header">
-                        <h3>Lista de Leads</h3>
-                        <div class="filter-bar">
-                            <button class="filter-btn active" onclick="filterLeads(null, this)">Todos</button>
-                            <button class="filter-btn" onclick="filterLeads('new', this)">Novos</button>
-                            <button class="filter-btn" onclick="filterLeads('active', this)">Ativos</button>
-                            <button class="filter-btn" onclick="filterLeads('qualified', this)">Qualificados</button>
+                    <div class="section-header" style="flex-direction:column;align-items:stretch;gap:10px">
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <h3>Lista de Leads</h3>
+                        </div>
+                        <div style="display:flex;gap:16px;flex-wrap:wrap">
+                            <div>
+                                <span style="font-size:11px;color:#71717a;text-transform:uppercase;margin-right:6px">Status</span>
+                                <div class="filter-bar" style="display:inline-flex">
+                                    <button class="filter-btn active" data-group="status" onclick="filterLeads('status', null, this)">Todos</button>
+                                    <button class="filter-btn" data-group="status" onclick="filterLeads('status', 'new', this)">Novos</button>
+                                    <button class="filter-btn" data-group="status" onclick="filterLeads('status', 'active', this)">Ativos</button>
+                                    <button class="filter-btn" data-group="status" onclick="filterLeads('status', 'qualified', this)">Qualificados</button>
+                                </div>
+                            </div>
+                            <div>
+                                <span style="font-size:11px;color:#71717a;text-transform:uppercase;margin-right:6px">Temperatura</span>
+                                <div class="filter-bar" style="display:inline-flex">
+                                    <button class="filter-btn active" data-group="temperature" onclick="filterLeads('temperature', null, this)">Todas</button>
+                                    <button class="filter-btn" data-group="temperature" onclick="filterLeads('temperature', 'hot', this)">🔥 Quente</button>
+                                    <button class="filter-btn" data-group="temperature" onclick="filterLeads('temperature', 'warm', this)">🌡️ Morno</button>
+                                    <button class="filter-btn" data-group="temperature" onclick="filterLeads('temperature', 'cold', this)">🧊 Frio</button>
+                                </div>
+                            </div>
+                            <div>
+                                <span style="font-size:11px;color:#71717a;text-transform:uppercase;margin-right:6px">Estágio</span>
+                                <select id="filter-stage" onchange="filterLeads('stage', this.value || null, null)" style="background:#0a0a0b;border:1px solid #3f3f46;color:#fafafa;padding:5px 10px;border-radius:20px;font-size:12px;font-family:'DM Sans',sans-serif">
+                                    <option value="">Todos</option>
+                                    <option value="abertura">Abertura</option>
+                                    <option value="motivacao">Motivação</option>
+                                    <option value="perfil_localizacao">Perfil/Localização</option>
+                                    <option value="tipologia">Tipologia</option>
+                                    <option value="financeiro">Financeiro</option>
+                                    <option value="decisores_urgencia">Decisores/Urgência</option>
+                                    <option value="pronto_para_curadoria">Pronto p/ curadoria</option>
+                                    <option value="pronto_para_visita">Pronto p/ visita</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     <div class="table-wrapper">
@@ -632,13 +804,15 @@
                                 <tr>
                                     <th>Lead</th>
                                     <th>Status</th>
+                                    <th>Temp.</th>
+                                    <th>Estágio</th>
                                     <th>Dados Coletados</th>
                                     <th>Última Mensagem</th>
                                     <th>Criado em</th>
                                 </tr>
                             </thead>
                             <tbody id="all-leads-table">
-                                <tr><td colspan="5" class="loading"><div class="spinner"></div>Carregando...</td></tr>
+                                <tr><td colspan="7" class="loading"><div class="spinner"></div>Carregando...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -800,6 +974,39 @@
         const TENANT_SLUG = 'upside';
         let allLeads = [];
         let currentLeadId = null;
+        let leadFilters = { status: null, temperature: null, stage: null };
+
+        const DIMENSION_LABELS = {
+            motivacao:        { icon: '🎯', name: 'Motivação' },
+            perfil_vida:      { icon: '👨‍👩‍👧', name: 'Perfil de Vida' },
+            localizacao:      { icon: '📍', name: 'Localização' },
+            tipologia:        { icon: '🏠', name: 'Tipologia' },
+            financeiro:       { icon: '💰', name: 'Financeiro' },
+            urgencia:         { icon: '⏱️', name: 'Urgência' },
+            decisores:        { icon: '🧩', name: 'Decisores' },
+        };
+        const DIMENSION_ORDER = ['motivacao', 'perfil_vida', 'localizacao', 'tipologia', 'financeiro', 'urgencia', 'decisores'];
+
+        const STAGE_LABELS = {
+            abertura: 'Abertura',
+            motivacao: 'Motivação',
+            perfil_localizacao: 'Perfil/Localização',
+            tipologia: 'Tipologia',
+            financeiro: 'Financeiro',
+            decisores_urgencia: 'Decisores/Urgência',
+            pronto_para_curadoria: 'Pronto p/ curadoria',
+            pronto_para_visita: 'Pronto p/ visita',
+        };
+
+        function tempBadge(temp) {
+            const map = {
+                hot:  { cls: 'temp-hot',  label: '🔥 Quente' },
+                warm: { cls: 'temp-warm', label: '🌡️ Morno' },
+                cold: { cls: 'temp-cold', label: '🧊 Frio' },
+            };
+            const cfg = map[temp] || { cls: 'temp-unknown', label: '—' };
+            return `<span class="temp-badge ${cfg.cls}">${cfg.label}</span>`;
+        }
 
         // ─── Auth check on API responses ───
         const originalFetch = window.fetch;
@@ -843,6 +1050,15 @@
                 document.getElementById('leads-badge').textContent = stats.total_leads || 0;
                 document.getElementById('appointments-badge').textContent = stats.total_appointments || 0;
 
+                // Qualification KPIs
+                document.getElementById('kpi-hot').textContent = stats.hot_leads ?? 0;
+                document.getElementById('kpi-warm').textContent = stats.warm_leads ?? 0;
+                document.getElementById('kpi-cold').textContent = stats.cold_leads ?? 0;
+                document.getElementById('kpi-hot-no-apt').textContent = stats.hot_without_appointment ?? 0;
+                document.getElementById('kpi-avg-dim').textContent = stats.avg_dimensions_filled ?? '0.0';
+                document.getElementById('kpi-avg-dim-sub').textContent = `de ${stats.total_dimensions ?? 7} cobertas`;
+                document.getElementById('kpi-no-followup').textContent = stats.leads_no_followup_7d ?? 0;
+
                 renderLeadsTable('recent-leads-table', leads.slice(0, 10));
             } catch (e) {
                 console.error('Dashboard error:', e);
@@ -850,10 +1066,14 @@
         }
 
         // ─── Leads ───
-        async function loadLeads(status = null) {
+        async function loadLeads() {
             try {
                 let url = `${API_BASE}/admin/tenants/${TENANT_SLUG}/leads`;
-                if (status) url += `?status=${status}`;
+                const params = [];
+                if (leadFilters.status) params.push(`status=${encodeURIComponent(leadFilters.status)}`);
+                if (leadFilters.temperature) params.push(`temperature=${encodeURIComponent(leadFilters.temperature)}`);
+                if (leadFilters.stage) params.push(`stage=${encodeURIComponent(leadFilters.stage)}`);
+                if (params.length) url += '?' + params.join('&');
                 const res = await fetch(url);
                 const leads = await res.json();
                 allLeads = leads;
@@ -863,16 +1083,20 @@
             }
         }
 
-        function filterLeads(status, btn) {
-            document.querySelectorAll('.filter-btn').forEach(el => el.classList.remove('active'));
-            btn.classList.add('active');
-            loadLeads(status);
+        function filterLeads(group, value, btn) {
+            leadFilters[group] = value;
+            if (btn) {
+                document.querySelectorAll(`.filter-btn[data-group="${group}"]`).forEach(el => el.classList.remove('active'));
+                btn.classList.add('active');
+            }
+            loadLeads();
         }
 
         function renderLeadsTable(tableId, leads, showExtra = false) {
             const tbody = document.getElementById(tableId);
+            const colspan = showExtra ? 7 : 5;
             if (!leads.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="icon">👥</div><p>Nenhum lead encontrado</p></td></tr>';
+                tbody.innerHTML = `<tr><td colspan="${colspan}" class="empty-state"><div class="icon">👥</div><p>Nenhum lead encontrado</p></td></tr>`;
                 return;
             }
 
@@ -884,14 +1108,18 @@
                 const interesse = profile.interesse || profile.transacao || '-';
                 const lastMsg = lead.last_message_at ? timeAgo(lead.last_message_at) : '-';
                 const created = lead.created_at ? formatDate(lead.created_at) : '-';
+                const tempCol = `<td>${tempBadge(lead.temperature)}</td>`;
+                const stageLabel = STAGE_LABELS[lead.qualification_stage] || '—';
+                const stageCol = `<td><span class="stage-pill">${stageLabel}</span></td>`;
 
-                let extraCols = '';
+                let extraCols;
                 if (showExtra) {
                     const dados = [];
                     if (profile.tipo_imovel) dados.push(profile.tipo_imovel);
                     if (profile.cidade) dados.push(profile.cidade);
                     if (profile.quartos_min) dados.push(profile.quartos_min + 'q');
                     extraCols = `
+                        ${stageCol}
                         <td>${dados.join(', ') || '-'}</td>
                         <td class="time-ago">${lastMsg}</td>
                         <td class="time-ago">${created}</td>
@@ -904,12 +1132,13 @@
                 }
 
                 return `
-                    <tr onclick="openConversation('${lead.id}', '${name}', '${lead.whatsapp_number}')">
+                    <tr onclick="openConversation('${lead.id}', '${name.replace(/'/g, "\\'")}', '${lead.whatsapp_number}')">
                         <td>
                             <span class="lead-name">${name}</span>
                             <span class="lead-phone">${phone}</span>
                         </td>
                         <td><span class="status-badge status-${status}">${status}</span></td>
+                        ${tempCol}
                         ${extraCols}
                     </tr>
                 `;
@@ -1004,27 +1233,157 @@
             }
 
             const profile = lead.profile_data || {};
-            const items = [
+            const qual = profile.qualification || {};
+            const dimsStatus = lead.dimensions_filled || {};
+            const stageLabel = STAGE_LABELS[lead.qualification_stage] || '—';
+            const filled = Object.values(dimsStatus).filter(s => s !== 'missing').length;
+
+            // Bloco de identificação básica
+            const idItems = [
                 ['Nome', lead.name || 'Não informado'],
                 ['WhatsApp', formatPhone(lead.whatsapp_number)],
                 ['Status', lead.status || 'new'],
                 ['Criado em', formatDate(lead.created_at)],
             ];
 
-            // Add profile data
-            if (profile.interesse) items.push(['Interesse', profile.interesse]);
-            if (profile.tipo_imovel) items.push(['Tipo', profile.tipo_imovel]);
-            if (profile.cidade) items.push(['Cidade', profile.cidade]);
-            if (profile.bairro) items.push(['Bairro', profile.bairro]);
-            if (profile.quartos_min) items.push(['Quartos', profile.quartos_min]);
-            if (profile.preco_max) items.push(['Preço máx', 'R$ ' + Number(profile.preco_max).toLocaleString('pt-BR')]);
+            // Resumo de busca (campos da raiz que alimentam buscar_imoveis)
+            const searchItems = [];
+            if (profile.interesse) searchItems.push(['Interesse', profile.interesse]);
+            if (profile.tipo_imovel) searchItems.push(['Tipo', profile.tipo_imovel]);
+            if (profile.cidade) searchItems.push(['Cidade', profile.cidade]);
+            if (profile.bairros && profile.bairros.length) searchItems.push(['Bairros', profile.bairros.join(', ')]);
+            if (profile.condominio) searchItems.push(['Condomínio', profile.condominio]);
+            if (profile.quartos_min) searchItems.push(['Quartos mín', profile.quartos_min]);
+            if (profile.preco_max) searchItems.push(['Preço máx', 'R$ ' + Number(profile.preco_max).toLocaleString('pt-BR')]);
 
-            container.innerHTML = items.map(([key, val]) => `
-                <div class="profile-item">
-                    <span class="key">${key}</span>
-                    <span class="val">${val}</span>
+            // Topo: temperatura + estágio
+            const summary = `
+                <div class="qual-summary">
+                    <div class="temp-line">
+                        ${tempBadge(lead.temperature)}
+                        <span style="font-size:11px;color:#71717a;font-family:'JetBrains Mono',monospace">${filled}/7 dimensões</span>
+                    </div>
+                    ${lead.temperature_reason && lead.temperature_reason !== 'default'
+                        ? `<div class="temp-reason">razão: ${lead.temperature_reason}</div>` : ''}
+                    <div class="stage-line">Estágio: <span class="stage-pill">${stageLabel}</span></div>
                 </div>
+            `;
+
+            const idBlock = idItems.map(([k, v]) => `
+                <div class="profile-item"><span class="key">${k}</span><span class="val">${v}</span></div>
             `).join('');
+
+            const searchBlock = searchItems.length ? `
+                <h4 style="margin-top:14px">Resumo de busca</h4>
+                ${searchItems.map(([k, v]) => `
+                    <div class="profile-item"><span class="key">${k}</span><span class="val">${v}</span></div>
+                `).join('')}
+            ` : '';
+
+            const dimsBlock = `
+                <h4 style="margin-top:14px">7 Dimensões</h4>
+                ${DIMENSION_ORDER.map(dim => renderDimension(dim, dimsStatus[dim] || 'missing', qual[dim] || {})).join('')}
+            `;
+
+            container.innerHTML = summary + idBlock + searchBlock + dimsBlock;
+        }
+
+        function toggleDim(el) {
+            el.parentElement.classList.toggle('open');
+        }
+
+        function renderDimension(dim, status, data) {
+            const meta = DIMENSION_LABELS[dim];
+            const statusIcon = status === 'complete' ? '<span class="dim-status-complete">✓</span>'
+                            : status === 'partial' ? '<span class="dim-status-partial">…</span>'
+                            : '<span class="dim-status-missing">○</span>';
+            const statusLabel = status === 'complete' ? 'completa'
+                              : status === 'partial' ? 'parcial' : 'pendente';
+
+            const rows = [];
+            for (const [k, v] of Object.entries(data || {})) {
+                if (v === null || v === undefined) continue;
+                if (Array.isArray(v) && !v.length) continue;
+                if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0) continue;
+                rows.push([humanKey(k), humanValue(v)]);
+            }
+
+            const body = rows.length
+                ? rows.map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')
+                : `<div class="row"><span class="k" style="font-style:italic">sem dados ainda</span></div>`;
+
+            const openClass = status !== 'missing' ? 'open' : '';
+            return `
+                <div class="dim-section ${openClass}">
+                    <div class="dim-header" onclick="toggleDim(this)">
+                        <span><span style="margin-right:6px">${meta.icon}</span>${meta.name} <span class="icon-status">${statusIcon}</span></span>
+                        <span class="arrow">▶</span>
+                    </div>
+                    <div class="dim-body">
+                        <div style="font-size:10px;color:#71717a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${statusLabel}</div>
+                        ${body}
+                    </div>
+                </div>
+            `;
+        }
+
+        function humanKey(k) {
+            const map = {
+                gatilho: 'Gatilho',
+                situacao_atual: 'Situação atual',
+                proposito: 'Propósito',
+                objecao_latente: 'Objeção latente',
+                moradores: 'Moradores',
+                filhos_idades: 'Filhos (idades)',
+                pet: 'Pet',
+                home_office: 'Home office',
+                veiculos: 'Veículos',
+                vagas_eliminatorias: 'Vagas eliminatórias',
+                estilo_vida: 'Estilo de vida',
+                polo_trabalho: 'Polo trabalho',
+                escolas_filhos: 'Escola dos filhos',
+                bairros_descartados: 'Bairros descartados',
+                indispensavel_perto: 'Indispensável perto',
+                tempo_max_commute: 'Commute máx (min)',
+                necessidades: 'Necessidades',
+                desejos: 'Desejos',
+                aceita_reforma: 'Aceita reforma',
+                suites_min: 'Suítes mín',
+                imoveis_visitados: 'Imóveis visitados',
+                modalidade: 'Modalidade',
+                credito_status: 'Crédito',
+                fgts_disponivel: 'FGTS',
+                imovel_para_venda: 'Imóvel pra vender',
+                ciente_custos_acessorios: 'Ciente ITBI/cartório',
+                prazo: 'Prazo',
+                evento_ancora: 'Evento âncora',
+                disponibilidade_visita: 'Disponibilidade visita',
+                outros_corretores: 'Outros corretores',
+                outros: 'Outros decisores',
+                aprovador_oculto: 'Aprovador oculto',
+                influenciador_externo: 'Influenciador',
+                prioridades_decisor_2: 'Prioridades do 2º decisor',
+            };
+            return map[k] || k;
+        }
+
+        function humanValue(v) {
+            if (Array.isArray(v)) {
+                return v.map(item => {
+                    if (typeof item === 'object' && item !== null) {
+                        if (item.bairro && item.motivo) return `${item.bairro} (${item.motivo})`;
+                        if (item.relacao) return item.ja_visitou ? `${item.relacao} ✓` : item.relacao;
+                        return JSON.stringify(item);
+                    }
+                    return item;
+                }).join(', ');
+            }
+            if (typeof v === 'object' && v !== null) {
+                if ('tem' in v) return v.tem ? `Sim${v.porte ? ' (' + v.porte + ')' : ''}` : 'Não';
+                return Object.entries(v).map(([k2, v2]) => `${k2}: ${v2}`).join('; ');
+            }
+            if (typeof v === 'boolean') return v ? 'Sim' : 'Não';
+            return String(v);
         }
 
         function backToList() {

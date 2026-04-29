@@ -15,6 +15,11 @@ from app.redis_client import redis_client
 from app.services.crm49_client import is_crm49_tenant
 from app.services.property_cache import PropertyCache
 from app.services.property_sync import sync_all_tenants_once
+from app.services.qualification import (
+    DIMENSION_KEYS,
+    dimensions_filled_count,
+    dimensions_status,
+)
 from app.services.session_manager import SessionManager
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -102,9 +107,15 @@ async def list_tenants(db: AsyncSession = Depends(get_db)):
 async def list_leads(
     tenant_slug: str,
     status: str | None = None,
+    temperature: str | None = None,
+    stage: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """List leads for a tenant."""
+    """List leads for a tenant.
+
+    Optional filters: `status`, `temperature` (hot|warm|cold), `stage`
+    (qualification_stage value).
+    """
     # Get tenant
     stmt = select(Tenant).where(Tenant.slug == tenant_slug)
     result = await db.execute(stmt)
@@ -116,6 +127,10 @@ async def list_leads(
     query = select(Lead).where(Lead.tenant_id == tenant.id)
     if status:
         query = query.where(Lead.status == status)
+    if temperature:
+        query = query.where(Lead.temperature == temperature)
+    if stage:
+        query = query.where(Lead.qualification_stage == stage)
     query = query.order_by(Lead.last_message_at.desc().nullslast())
 
     result = await db.execute(query)
@@ -128,6 +143,10 @@ async def list_leads(
             "whatsapp_number": l.whatsapp_number,
             "status": l.status,
             "profile_data": l.profile_data,
+            "temperature": l.temperature,
+            "qualification_stage": l.qualification_stage,
+            "temperature_reason": l.temperature_reason,
+            "dimensions_filled": dimensions_status(l.profile_data or {}),
             "last_message_at": l.last_message_at,
             "created_at": l.created_at,
         }
@@ -213,7 +232,9 @@ async def get_tenant_stats(
     tenant_slug: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """Get basic stats for a tenant."""
+    """Get tenant stats — basic counts plus qualification KPIs."""
+    from datetime import timedelta
+
     stmt = select(Tenant).where(Tenant.slug == tenant_slug)
     result = await db.execute(stmt)
     tenant = result.scalar_one_or_none()
@@ -225,7 +246,7 @@ async def get_tenant_stats(
         select(func.count()).select_from(Lead).where(Lead.tenant_id == tenant.id)
     )
 
-    # Active leads (messaged in last 7 days)
+    # Active leads
     active_leads = await db.scalar(
         select(func.count())
         .select_from(Lead)
@@ -249,12 +270,76 @@ async def get_tenant_stats(
         .where(Appointment.tenant_id == tenant.id)
     )
 
+    # Temperature buckets
+    hot_leads = await db.scalar(
+        select(func.count())
+        .select_from(Lead)
+        .where(Lead.tenant_id == tenant.id, Lead.temperature == "hot")
+    )
+    warm_leads = await db.scalar(
+        select(func.count())
+        .select_from(Lead)
+        .where(Lead.tenant_id == tenant.id, Lead.temperature == "warm")
+    )
+    cold_leads = await db.scalar(
+        select(func.count())
+        .select_from(Lead)
+        .where(Lead.tenant_id == tenant.id, Lead.temperature == "cold")
+    )
+
+    # Hot leads without any appointment scheduled — natural alert.
+    appointment_exists = (
+        select(Appointment.id)
+        .where(Appointment.lead_id == Lead.id)
+        .correlate(Lead)
+        .exists()
+    )
+    hot_without_appointment = await db.scalar(
+        select(func.count())
+        .select_from(Lead)
+        .where(
+            Lead.tenant_id == tenant.id,
+            Lead.temperature == "hot",
+            ~appointment_exists,
+        )
+    )
+
+    # Sem follow-up há 7+ dias entre leads ativos.
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    leads_no_followup_7d = await db.scalar(
+        select(func.count())
+        .select_from(Lead)
+        .where(
+            Lead.tenant_id == tenant.id,
+            Lead.status == "active",
+            Lead.last_message_at < cutoff,
+        )
+    )
+
+    # Média de dimensões preenchidas — calcula em Python pq depende do JSONB.
+    profiles_stmt = select(Lead.profile_data).where(Lead.tenant_id == tenant.id)
+    profiles_result = await db.execute(profiles_stmt)
+    profiles = [row[0] or {} for row in profiles_result.all()]
+    avg_dimensions = (
+        round(sum(dimensions_filled_count(p) for p in profiles) / len(profiles), 1)
+        if profiles
+        else 0.0
+    )
+
     return {
         "tenant": tenant.name,
         "total_leads": total_leads,
         "active_leads": active_leads,
         "total_messages": total_messages,
         "total_appointments": total_appointments,
+        # Qualification KPIs
+        "hot_leads": hot_leads or 0,
+        "warm_leads": warm_leads or 0,
+        "cold_leads": cold_leads or 0,
+        "hot_without_appointment": hot_without_appointment or 0,
+        "avg_dimensions_filled": avg_dimensions,
+        "total_dimensions": len(DIMENSION_KEYS),
+        "leads_no_followup_7d": leads_no_followup_7d or 0,
     }
 
 
