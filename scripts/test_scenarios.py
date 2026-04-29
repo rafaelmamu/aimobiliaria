@@ -126,6 +126,28 @@ SCENARIOS = {
             "ainda não pensamos no orçamento, queria entender as opções",
         ],
     },
+    # ─── Cenários para os bugs reportados na conversa do dono ───
+    "M": {
+        "title": "Filtro de preço — props sem preço NÃO devem aparecer com teto",
+        "turns": [
+            "quero apto pra venda em SJC, 3 quartos, até 650k",
+        ],
+    },
+    "N": {
+        "title": "Identificação por nome — bot deve usar código correto da última lista",
+        "turns": [
+            "quero apto pra venda em SJC até 700k",
+            "manda fotos do Wonder",
+        ],
+    },
+    "O": {
+        "title": "Qualification preenchido — dimensões devem aparecer no profile",
+        "turns": [
+            "casei recentemente, somos eu e minha esposa, ela trabalha no centro de SJC e eu de casa",
+            "preciso de 3 quartos com suíte e varanda gourmet seria ótimo",
+            "vou financiar usando FGTS, teto uns 700k",
+        ],
+    },
 }
 
 
@@ -150,6 +172,9 @@ async def run_scenario(letter: str, scenario: dict, agent: AIAgent, tool_handler
         "turns": 0,
         "photos_per_turn": [],
         "modo_observed": [],
+        "qualification_dims_seen": set(),  # dimensions populated across turns
+        "search_filters": [],              # filters passed to buscar_imoveis
+        "details_ids": [],                 # imovel_id passed to detalhes_imovel
     }
     searched = False
 
@@ -168,13 +193,26 @@ async def run_scenario(letter: str, scenario: dict, agent: AIAgent, tool_handler
 
         for tc in result["tool_calls"]:
             metrics["tools_called"].append(tc["name"])
-            if tc["name"] == "buscar_imoveis" and not searched:
-                searched = True
-                metrics["first_search_turn"] = turn_idx
+            if tc["name"] == "buscar_imoveis":
+                metrics["search_filters"].append(tc["input"])
+                if not searched:
+                    searched = True
+                    metrics["first_search_turn"] = turn_idx
             if tc["name"] == "salvar_preferencias":
                 modo = tc["input"].get("modo_detectado")
                 if modo:
                     metrics["modo_observed"].append(modo)
+                qual = tc["input"].get("qualification") or {}
+                for dim_name, dim_data in qual.items():
+                    if dim_name == "_meta":
+                        continue
+                    if isinstance(dim_data, dict) and any(
+                        v is not None and v != [] and v != {}
+                        for v in dim_data.values()
+                    ):
+                        metrics["qualification_dims_seen"].add(dim_name)
+            if tc["name"] == "detalhes_imovel":
+                metrics["details_ids"].append(tc["input"].get("imovel_id"))
 
         if not searched:
             metrics["questions_before_first_search"] += _count_questions(response)
@@ -190,11 +228,12 @@ async def run_scenario(letter: str, scenario: dict, agent: AIAgent, tool_handler
 
     metrics["turns"] = len(scenario["turns"])
     print(
-        f"\n📊 Métricas: perguntas até 1ª busca = {metrics['questions_before_first_search']}, "
-        f"1ª busca no turno = {metrics['first_search_turn']}, "
+        f"\n📊 Métricas: 1ª busca @ turno {metrics['first_search_turn']}, "
         f"fotos/turno = {metrics['photos_per_turn']}, "
-        f"modo observado = {metrics['modo_observed']}, "
-        f"tools = {metrics['tools_called']}"
+        f"modo = {metrics['modo_observed']}, "
+        f"dimensões coletadas = {sorted(metrics['qualification_dims_seen']) or '∅'}, "
+        f"detalhes_imovel ids = {metrics['details_ids']}, "
+        f"buscar filtros = {metrics['search_filters']}"
     )
     return metrics
 
@@ -253,12 +292,13 @@ async def main():
     print("RESUMO")
     print("=" * 70)
     for letter, m in results.items():
+        dims = sorted(m["qualification_dims_seen"]) or "∅"
         print(
-            f"  {letter}: 1ª busca @ turno {m['first_search_turn']}, "
-            f"{m['questions_before_first_search']} perguntas antes, "
-            f"fotos/turno={m['photos_per_turn']}, "
+            f"  {letter}: 1ª busca @ {m['first_search_turn']}, "
+            f"fotos={m['photos_per_turn']}, "
             f"modo={m['modo_observed']}, "
-            f"tools={m['tools_called']}"
+            f"dims={dims}, "
+            f"details={m['details_ids']}"
         )
 
 

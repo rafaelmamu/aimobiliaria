@@ -59,8 +59,12 @@ def apply_filters(properties: list[dict], filters: dict) -> list[dict]:
         if quartos_min and (prop.get("quartos") or 0) < quartos_min:
             continue
         preco = prop.get("preco") or 0
-        if preco_max and preco > preco_max:
-            continue
+        if preco_max:
+            # Reject listings without a price ("Consulte preço") when a
+            # ceiling is set — otherwise lançamentos sem valor escapam do
+            # filtro e aparecem acima do orçamento.
+            if preco <= 0 or preco > preco_max:
+                continue
         if preco_min and preco < preco_min:
             continue
         if area_min and (prop.get("area_privativa") or 0) < area_min:
