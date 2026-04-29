@@ -159,12 +159,18 @@ async def reset_lead_conversation(
     lead_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """Wipe a lead's conversation so the bot starts fresh on the next message.
+    """Reset a lead so the bot starts completely fresh on the next message.
 
-    Clears BOTH the Redis session AND the PostgreSQL `messages` rows for the
-    lead. Clearing only Redis is not enough: when the session expires, the
-    webhook restores history from the DB (`webhooks.py:180`), which would
-    resurrect the same context that made the bot say "no results".
+    Wipes EVERYTHING for the lead: Redis session, PostgreSQL `messages`, and
+    the extracted profile + qualification state (profile_data, temperatura,
+    estágio). The Lead row itself stays (so the next inbound message still
+    matches by tenant_id + whatsapp_number) but any preferences from the
+    previous conversation are gone — o bot redescobre do zero.
+
+    Clearing only Redis is not enough: when the session expires, the webhook
+    restores history from the DB, ressuscitando o mesmo contexto. Clearing
+    só as mensagens também não bastava — o profile_data antigo (com preço
+    errado etc.) seguia influenciando a próxima busca.
     """
     try:
         lead_uuid = uuid.UUID(lead_id)
@@ -181,6 +187,11 @@ async def reset_lead_conversation(
     deleted = result.rowcount or 0
 
     lead.last_message_at = None
+    lead.profile_data = {}
+    lead.temperature = None
+    lead.temperature_reason = None
+    lead.qualification_stage = None
+    lead.status = "new"
     await db.commit()
 
     session_mgr = SessionManager(redis_client)

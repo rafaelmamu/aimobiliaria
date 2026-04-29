@@ -342,7 +342,12 @@ class MockPropertyAPIClient(PropertyAPIClient):
                     match = False
 
             if "preco_max" in filters and filters["preco_max"]:
-                if (prop.get("preco") or 0) > filters["preco_max"]:
+                preco = prop.get("preco") or 0
+                # Reject listings without a price ("Consulte preço") when the
+                # customer set a ceiling — otherwise lançamentos sem valor
+                # vazam pra dentro de buscas com teto modesto e o cliente vê
+                # imóveis muito acima do orçamento.
+                if preco <= 0 or preco > filters["preco_max"]:
                     match = False
 
             if "preco_min" in filters and filters["preco_min"]:
