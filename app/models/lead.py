@@ -30,6 +30,12 @@ class Lead(Base):
     source: Mapped[str | None] = mapped_column(String(100))
     tags: Mapped[list] = mapped_column(ARRAY(Text), default=list)
 
+    # Qualificação (metodologia Upside — apostila cap. 3 e 8). Recalculados
+    # cada vez que o tool `salvar_preferencias` grava em profile_data.
+    temperature: Mapped[str | None] = mapped_column(String(10))  # hot|warm|cold
+    qualification_stage: Mapped[str | None] = mapped_column(String(30))
+    temperature_reason: Mapped[str | None] = mapped_column(String(255))
+
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(

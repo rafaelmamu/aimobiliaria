@@ -39,3 +39,6 @@ logs/
 
 # Local test fixtures (dump from prod /admin/crm49/peek)
 scripts/fixtures/
+
+# Internal training material (Upside qualification methodology — confidential)
+uploads/

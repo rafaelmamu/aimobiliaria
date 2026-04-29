@@ -72,6 +72,11 @@ async def lifespan(app: FastAPI):
         column_additions = [
             "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS broker_name VARCHAR(255)",
             "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS broker_phone VARCHAR(50)",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS temperature VARCHAR(10)",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS qualification_stage VARCHAR(30)",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS temperature_reason VARCHAR(255)",
+            "CREATE INDEX IF NOT EXISTS idx_leads_temperature ON leads(temperature)",
+            "CREATE INDEX IF NOT EXISTS idx_leads_stage ON leads(qualification_stage)",
         ]
         async with engine.begin() as conn:
             for stmt in column_additions:
